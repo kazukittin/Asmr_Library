@@ -1,12 +1,42 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { Sidebar } from './components/Sidebar';
 import { PlayerBar } from './components/PlayerBar';
 import { WorkGrid } from './components/WorkGrid';
 import { Search } from 'lucide-react';
 
+function BrowserWarning() {
+  return (
+    <div className="flex h-screen w-screen items-center justify-center bg-gray-900 text-white p-10 text-center flex-col">
+      <h1 className="text-3xl font-bold mb-4 text-red-500">Tauri Environment Required</h1>
+      <p className="max-w-md text-gray-300 mb-8">
+        This application relies on Tauri's backend capabilities (File System, Database, Audio) and cannot run in a standard web browser.
+      </p>
+      <div className="bg-gray-800 p-4 rounded-lg font-mono text-sm text-left">
+        <p className="text-gray-400 mb-2">Please run the following command in your terminal:</p>
+        <code className="text-accent select-all">npm run tauri dev</code>
+      </div>
+    </div>
+  );
+}
+
 function App() {
   const [searchQuery, setSearchQuery] = useState("");
+  // Immediately check for Tauri environment to avoid rendering backend calls in browser
+  const [isTauri, setIsTauri] = useState(() => {
+    return typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window);
+  });
+
+  useEffect(() => {
+    // Double check in effect in case of hydration issues or late injection (though rare)
+    if (!('__TAURI_INTERNALS__' in window) && !('__TAURI__' in window)) {
+      setIsTauri(false);
+    }
+  }, []);
+
+  if (!isTauri) {
+    return <BrowserWarning />;
+  }
 
   const handleScan = async () => {
     // Hardcoded path for testing or ask user

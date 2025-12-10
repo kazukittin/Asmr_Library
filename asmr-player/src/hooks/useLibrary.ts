@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import Database from '@tauri-apps/plugin-sql';
+import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
 export interface Work {
@@ -16,8 +16,8 @@ export function useLibrary() {
 
     const fetchLibrary = async () => {
         try {
-            const db = await Database.load('sqlite:library.db');
-            const result = await db.select<Work[]>('SELECT * FROM works ORDER BY created_at DESC');
+            setLoading(true);
+            const result = await invoke<Work[]>('get_all_works');
             setWorks(result);
             setLoading(false);
         } catch (error) {
@@ -33,8 +33,10 @@ export function useLibrary() {
         // Or just listen for specific finish event. 
         // For now we just fetch on mount.
         const unlisten = listen('scan-progress', () => {
-            // Maybe don't refresh on every single file, but for now it's MVP
-            // fetchLibrary(); 
+            // Optional: Update progress or partial fetch?
+            // For MVP, maybe not fetch on EVERY file, but let's leave it manual or strictly on mount/notify?
+            // Actually, if we want real-time updates:
+            fetchLibrary();
         });
 
         return () => {

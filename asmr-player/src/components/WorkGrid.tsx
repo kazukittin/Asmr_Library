@@ -1,6 +1,7 @@
 import { Play } from 'lucide-react';
 import { useLibrary, Work } from '../hooks/useLibrary';
 import { usePlayerStore } from '../hooks/usePlayerStore';
+import { convertFileSrc } from '@tauri-apps/api/core';
 
 export function WorkGrid() {
     const { works, loading } = useLibrary();
@@ -33,14 +34,14 @@ export function WorkGrid() {
                     <div key={work.id} className="group relative flex flex-col cursor-pointer">
                         <div className="aspect-[2/3] w-full rounded-xl overflow-hidden relative bg-bg-panel shadow-lg shadow-black/50 group-hover:shadow-accent/20 transition-all duration-300 transform group-hover:-translate-y-1 ring-1 ring-white/5 group-hover:ring-accent/50">
                             <img
-                                src={work.cover_path || `https://placehold.co/400x600/2a2a35/FFF?text=${work.rj_code || 'ASMR'}`}
+                                src={work.cover_path ? convertFileSrc(work.cover_path) : `https://placehold.co/400x600/2a2a35/FFF?text=${work.rj_code || 'ASMR'}`}
                                 alt={work.title}
                                 className="w-full h-full object-cover transition duration-700 group-hover:scale-110 opacity-90 group-hover:opacity-100"
                             />
 
                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center backdrop-blur-[2px]">
                                 <button
-                                    className="w-12 h-12 rounded-full bg-accent text-white flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.6)] hover:scale-110 transition-transform"
+                                    className="w-12 h-12 rounded-full bg-accent text-white flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.6)] hover:scale-105 transition-transform"
                                     onClick={(e) => {
                                         e.stopPropagation();
                                         handlePlay(work);
