@@ -1,32 +1,50 @@
 import { Play } from 'lucide-react';
 import { useLibrary, Work } from '../hooks/useLibrary';
 import { usePlayerStore } from '../hooks/usePlayerStore';
-import { convertFileSrc } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 
 export function WorkGrid() {
     const { works, loading } = useLibrary();
-    const { setTrack } = usePlayerStore();
+    const { setTrack, setQueue } = usePlayerStore();
 
     const handlePlay = async (work: Work) => {
-        console.log("Play work:", work.title);
-        // Mock play for now to satisfy linter and show functionality
-        setTrack({
-            id: 0,
-            title: `Track 1 of ${work.title}`,
-            path: "",
-            duration: 0,
-            work_title: work.title,
-            cover_path: work.cover_path || undefined
-        });
+        try {
+            console.log("Fetching tracks for work:", work.title);
+            const tracks = await invoke<any[]>('get_work_tracks', { workId: work.id });
+
+            if (tracks && tracks.length > 0) {
+                // Map backend track to frontend track interface if needed, or ensure they match
+                const mappedTracks = tracks.map(t => ({
+                    id: t.id,
+                    title: t.title,
+                    path: t.path,
+                    duration: t.duration || 0,
+                    work_title: work.title,
+                    cover_path: work.cover_path || undefined
+                }));
+
+                setQueue(mappedTracks);
+                setTrack(mappedTracks[0]);
+
+                // Trigger playback immediately if store doesn't auto-trigger? 
+                // Store says: set({ currentTrack: track, isPlaying: true }) so it should trigger if PlayerBar reacts.
+
+            } else {
+                console.warn("No tracks found for work.");
+            }
+        } catch (e) {
+            console.error("Failed to play work:", e);
+            alert(`Playback Error: ${e}`);
+        }
     };
 
-    if (loading) return <div className="p-8 text-white">Loading...</div>;
+    if (loading) return <div className="p-8 text-white">読み込み中...</div>;
 
     return (
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
             <div className="flex items-end justify-between mb-6">
-                <h2 className="text-2xl font-bold text-white tracking-tight">Recently Added</h2>
-                <span className="text-sm text-gray-500">{works.length} Works</span>
+                <h2 className="text-2xl font-bold text-white tracking-tight">最近追加された作品</h2>
+                <span className="text-sm text-gray-500">{works.length} 作品</span>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6 pb-20">
@@ -65,7 +83,7 @@ export function WorkGrid() {
                                 {work.title}
                             </h3>
                             <div className="flex justify-between items-center mt-1">
-                                <p className="text-xs text-gray-400 truncate">Unknown CV</p>
+                                <p className="text-xs text-gray-400 truncate">声優未設定</p>
                                 {work.rj_code && (
                                     <span className="text-[10px] text-gray-600 font-mono bg-white/5 px-1 rounded">
                                         {work.rj_code}

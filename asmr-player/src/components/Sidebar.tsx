@@ -24,7 +24,7 @@ export function Sidebar() {
             const selected = await open({
                 directory: true,
                 multiple: false,
-                title: "Select ASMR Library Folder"
+                title: "ASMRライブラリフォルダを選択"
             });
 
             if (selected) {
@@ -55,16 +55,16 @@ export function Sidebar() {
                     className="w-full flex items-center justify-center px-3 py-2 bg-white/5 hover:bg-white/10 text-white rounded-lg transition-colors border border-white/5"
                 >
                     <FolderPlus className="w-4 h-4 mr-2" />
-                    <span className="text-sm">{scanning ? 'Scanning...' : 'Scan Library'}</span>
+                    <span className="text-sm">{scanning ? 'スキャン中...' : 'ライブラリ更新'}</span>
                 </button>
             </div>
 
             <nav className="flex-1 overflow-y-auto py-2 px-3 space-y-1">
-                <div className="px-3 mb-2 text-xs font-bold text-gray-500 uppercase tracking-wider">Library</div>
+                <div className="px-3 mb-2 text-xs font-bold text-gray-500 uppercase tracking-wider">ライブラリ</div>
 
                 <a href="#" className="flex items-center px-3 py-2 text-white bg-white/5 rounded-lg transition-colors group">
                     <Library className="w-5 h-5 mr-3 text-accent" />
-                    全作品一覧
+                    最近追加された作品
                 </a>
                 <a href="#" className="flex items-center px-3 py-2 text-gray-400 hover:text-white hover:bg-bg-hover rounded-lg transition-colors">
                     <Mic className="w-5 h-5 mr-3 text-gray-500" />
@@ -75,7 +75,7 @@ export function Sidebar() {
                     タグ / ジャンル
                 </a>
 
-                <div className="mt-8 px-3 mb-2 text-xs font-bold text-gray-500 uppercase tracking-wider">Playlists</div>
+                <div className="mt-8 px-3 mb-2 text-xs font-bold text-gray-500 uppercase tracking-wider">プレイリスト</div>
                 <a href="#" className="flex items-center px-3 py-2 text-gray-400 hover:text-white hover:bg-bg-hover rounded-lg transition-colors">
                     <Ear className="w-5 h-5 mr-3 text-pink-500" />
                     耳かき (Binaural)
@@ -88,8 +88,8 @@ export function Sidebar() {
 
             <div className="p-4 border-t border-white/5 bg-black/20 shrink-0">
                 <div className="flex items-center justify-between text-xs text-gray-500 mb-2">
-                    <span>Scan Status</span>
-                    <span className={`text-green-500 ${scanning ? 'animate-pulse' : ''}`}>{scanning ? `Scanning... (${scanCount})` : 'Idle'}</span>
+                    <span>スキャン状況</span>
+                    <span className={`text-green-500 ${scanning ? 'animate-pulse' : ''}`}>{scanning ? `スキャン中... (${scanCount})` : '待機中'}</span>
                 </div>
                 <div className="h-1 w-full bg-gray-800 rounded-full overflow-hidden">
                     <div className="h-full bg-accent w-2/3 rounded-full"></div>

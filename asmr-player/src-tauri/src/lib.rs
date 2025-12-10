@@ -4,6 +4,7 @@ mod scanner;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::sync::Mutex;
 use tauri::{Listener, Manager};
+use std::str::FromStr;
 
 #[tauri::command]
 fn greet(name: &str) -> String {
@@ -28,6 +29,25 @@ async fn get_all_works(pool: tauri::State<'_, sqlx::SqlitePool>) -> Result<Vec<W
     Ok(works)
 }
 
+#[derive(serde::Serialize, sqlx::FromRow)]
+pub struct Track {
+    id: i64,
+    work_id: i64,
+    title: String,
+    path: String,
+    duration: Option<i32>,
+}
+
+#[tauri::command]
+async fn get_work_tracks(pool: tauri::State<'_, sqlx::SqlitePool>, work_id: i64) -> Result<Vec<Track>, String> {
+    let tracks = sqlx::query_as::<_, Track>("SELECT id, work_id, title, path, duration_sec as duration FROM tracks WHERE work_id = ? ORDER BY title ASC")
+        .bind(work_id)
+        .fetch_all(pool.inner())
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(tracks)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -38,10 +58,6 @@ pub fn run() {
         .setup(|app| {
             // Setup Audio State
             app.manage(Mutex::new(audio::AudioState::new()));
-
-            // Setup Database connection for Backend usage (Scanner)
-            // We use tokio::spawn to initialize it async because setup is synchronous (mostly)?
-            // Actually setup closure returns Result. We can block_on or use tauri::async_runtime.
 
             let app_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
@@ -55,9 +71,13 @@ pub fn run() {
                 let db_path = app_dir.join("library.db");
                 let db_url = format!("sqlite://{}", db_path.to_string_lossy());
 
+                let options = sqlx::sqlite::SqliteConnectOptions::from_str(&db_url)
+                    .expect("Failed to parse db url")
+                    .create_if_missing(true);
+
                 let pool = SqlitePoolOptions::new()
                     .max_connections(5)
-                    .connect(&db_url)
+                    .connect_with(options)
                     .await
                     .expect("Failed to connect to DB");
 
@@ -74,6 +94,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             get_all_works,
+            get_work_tracks,
             scanner::scan_library,
             audio::play_track,
             audio::pause_track,

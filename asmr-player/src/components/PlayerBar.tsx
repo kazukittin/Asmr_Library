@@ -28,19 +28,7 @@ export function PlayerBar() {
         await invoke('set_volume', { volume: v });
     };
 
-    const handleSeek = async (e: React.MouseEvent<HTMLDivElement>) => {
-        if (!currentTrack) return;
-        // Simple mock seek for now, logic needed to get width
-        const rect = e.currentTarget.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const width = rect.width;
-        const percent = x / width;
-        // Mock duration if 0
-        const d = duration || currentTrack.duration || 180;
-        const seekTime = percent * d;
-        setCurrentTime(seekTime);
-        await invoke('seek_track', { seconds: seekTime });
-    };
+
 
     // Visualizer logic (Real)
     useEffect(() => {
@@ -97,30 +85,77 @@ export function PlayerBar() {
         }
     }, [isPlaying]);
 
-    // Timer simulation for progress bar (since we don't strictly get progress back from backend yet efficiently)
+    // Timer for smooth UI updates
     useEffect(() => {
         let interval: ReturnType<typeof setInterval>;
         if (isPlaying) {
             interval = setInterval(() => {
-                setCurrentTime(t => t + 1);
+                setCurrentTime(t => {
+                    const next = t + 1;
+                    return next > duration ? duration : next;
+                });
             }, 1000);
         }
         return () => clearInterval(interval);
-    }, [isPlaying]);
+    }, [isPlaying, duration]);
 
-    // Update duration if track changes
+    // Backend sync listeners
     useEffect(() => {
-        if (currentTrack) {
-            setDuration(currentTrack.duration || 180);
+        const unlistenProgress = listen<number>('playback-progress', (event) => {
+            // Sync with backend if drift is large (>2s) to avoid jumping
+            const remoteTime = event.payload;
+            setCurrentTime(prev => {
+                if (Math.abs(prev - remoteTime) > 2) return remoteTime;
+                return prev;
+            });
+        });
+
+        const unlistenDuration = listen<number>('track-duration', (event) => {
+            setDuration(event.payload);
+        });
+
+        return () => {
+            unlistenProgress.then(f => f());
+            unlistenDuration.then(f => f());
+        }
+    }, []);
+
+    // Play track when currentTrack changes
+    useEffect(() => {
+        if (currentTrack && currentTrack.path) {
+            // Reset state
             setCurrentTime(0);
+            setDuration(currentTrack.duration || 0);
+
+            invoke('play_track', { path: currentTrack.path })
+                .then(() => {
+                    setIsPlaying(true);
+                    invoke('set_volume', { volume });
+                })
+                .catch(console.error);
         }
     }, [currentTrack]);
+
+
+
+    const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const val = parseFloat(e.target.value);
+        setCurrentTime(val);
+    };
+
+    const handleSeekCommit = async () => {
+        await invoke('seek_track', { seconds: currentTime });
+    };
 
     const formatTime = (sec: number) => {
         const m = Math.floor(sec / 60);
         const s = Math.floor(sec % 60);
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     };
+
+    // ... (keep Visualizer logic) ...
+
+    const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
     return (
         <footer className="h-24 bg-[#0f0f12] border-t border-white/5 flex items-center justify-between px-6 z-50 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)] shrink-0">
@@ -134,13 +169,13 @@ export function PlayerBar() {
                         </div>
                         <div className="flex flex-col overflow-hidden">
                             <span className="text-sm font-bold text-white truncate cursor-pointer hover:underline decoration-accent">{currentTrack.title}</span>
-                            <span className="text-xs text-gray-400 truncate mt-0.5">{currentTrack.work_title || "Unknown Work"}</span>
+                            <span className="text-xs text-gray-400 truncate mt-0.5">{currentTrack.work_title || "作品名未設定"}</span>
                         </div>
                     </>
                 )}
             </div>
 
-            <div className="flex flex-col items-center flex-1 max-w-2xl px-8 z-10">
+            <div className="flex flex-col items-center flex-1 min-w-0 px-4 max-w-3xl w-full z-10">
                 <div className="flex items-center gap-6 mb-2">
                     <button className="text-gray-400 hover:text-white transition"><Shuffle className="w-4 h-4" /></button>
                     <button className="text-gray-300 hover:text-white hover:scale-110 transition" onClick={playPrev}><SkipBack className="w-6 h-6" /></button>
@@ -154,15 +189,32 @@ export function PlayerBar() {
                     <button className="text-accent hover:text-accent-glow transition"><Repeat className="w-4 h-4" /></button>
                 </div>
 
-                <div className="w-full flex items-center gap-3 text-xs font-mono text-gray-500">
-                    <span className="text-white">{formatTime(currentTime)}</span>
-                    <div className="relative flex-1 h-1 bg-gray-800 rounded-full group cursor-pointer" onClick={handleSeek}>
+                <div className="w-full flex items-center gap-3 text-xs font-mono text-gray-400">
+                    <span className="min-w-[40px] text-right text-white">{formatTime(currentTime)}</span>
+
+                    <div className="relative flex-1 h-4 flex items-center group">
+                        <input
+                            type="range"
+                            min="0"
+                            max={duration || 100}
+                            value={currentTime}
+                            onChange={handleSeek}
+                            onMouseUp={handleSeekCommit}
+                            onTouchEnd={handleSeekCommit}
+                            className="absolute w-full h-1 bg-transparent opacity-0 cursor-pointer z-20"
+                        />
+
+                        <div className="w-full h-1 bg-gray-700 rounded-lg overflow-hidden relative">
+                            <div className="absolute top-0 left-0 h-full bg-accent" style={{ width: `${progressPercent}%` }}></div>
+                        </div>
+
                         <div
-                            className="absolute top-0 left-0 h-full bg-accent rounded-full group-hover:bg-accent-glow transition-all"
-                            style={{ width: `${(currentTime / (duration || 1)) * 100}%` }}
+                            className="absolute h-3 w-3 bg-white rounded-full shadow pointer-events-none z-10 transition-transform group-hover:scale-125"
+                            style={{ left: `${progressPercent}%`, transform: 'translateX(-50%)' }}
                         ></div>
                     </div>
-                    <span>{formatTime(duration)}</span>
+
+                    <span className="min-w-[40px]">{formatTime(duration)}</span>
                 </div>
             </div>
 

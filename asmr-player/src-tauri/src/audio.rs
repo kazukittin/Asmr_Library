@@ -4,7 +4,7 @@ use spectrum_analyzer::{samples_fft_to_spectrum, FrequencyLimit};
 use std::fs::File;
 use std::io::BufReader;
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
 use tokio::sync::broadcast;
 
@@ -128,10 +128,22 @@ fn setup_sink_and_play(
     // rodio 0.17 convert_samples
     let source_f32 = source.convert_samples::<f32>();
     
+    // Get metadata BEFORE consuming explicit source
+    let sample_rate = source_f32.sample_rate();
+    let channels = source_f32.channels();
+    let total_duration = source_f32.total_duration();
+
+    // Emit duration
+    if let Some(duration) = total_duration {
+        let _ = app_handle.emit("track-duration", duration.as_secs_f64());
+    }
+
     // Skip if seeking
     let source_skipped = source_f32.skip_duration(Duration::from_secs_f32(skip_seconds));
 
-    let (tx, mut rx) = broadcast::channel(16);
+    // Set up channels for visualizer and progress
+    // We increase buffer size to avoid lag? No, 16 is fine if we consume fast.
+    let (tx, mut rx) = broadcast::channel(32);
     
     let viz_source = VisualizerSource::new(source_skipped, tx);
     
@@ -139,10 +151,20 @@ fn setup_sink_and_play(
     sink.play();
 
     tauri::async_runtime::spawn(async move {
+        // Calculate initial offset in samples
+        let mut processed_samples: u64 = 0;
+        let start_offset_seconds = skip_seconds as f64;
+        
+        let mut last_emit = Instant::now();
+
         while let Ok(samples) = rx.recv().await {
+             let chunk_len = samples.len() as u64;
+             processed_samples += chunk_len;
+
+             // 1. FFT
              let spectrum = samples_fft_to_spectrum(
                  &samples,
-                 44100, 
+                 sample_rate, 
                  FrequencyLimit::Range(20., 20000.),
                  Some(&divide_by_N),
              );
@@ -152,8 +174,19 @@ fn setup_sink_and_play(
                  if data.len() > 100 {
                      data.truncate(100); 
                  }
-                 
                  let _ = app_handle.emit("spectrum-update", data);
+             }
+
+             // 2. Progress
+             // Only emit every ~250ms or so to save bandwidth
+             if last_emit.elapsed().as_millis() > 250 {
+                 let samples_per_sec = (sample_rate as u64) * (channels as u64);
+                 if samples_per_sec > 0 {
+                     let elapsed_seconds = processed_samples as f64 / samples_per_sec as f64;
+                     let total_current_time = start_offset_seconds + elapsed_seconds;
+                     let _ = app_handle.emit("playback-progress", total_current_time);
+                 }
+                 last_emit = Instant::now();
              }
         }
     });
