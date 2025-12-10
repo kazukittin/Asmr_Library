@@ -1,10 +1,8 @@
-use rodio::{Decoder, OutputStream, Sink, Source};
+use rodio::{Decoder, OutputStream, Sink, Source, OutputStreamHandle};
 use spectrum_analyzer::scaling::divide_by_N;
 use spectrum_analyzer::{samples_fft_to_spectrum, FrequencyLimit};
-use spectrum_analyzer::windows::hann_window;
 use std::fs::File;
 use std::io::BufReader;
-use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, State};
@@ -12,28 +10,42 @@ use tokio::sync::broadcast;
 
 pub struct AudioState {
     pub sink: Option<Sink>,
-    pub stream: Option<OutputStream>,
-    pub stream_handle: Option<rodio::OutputStreamHandle>,
+    // stream is !Send, so we don't store it here. We leak it in new().
+    pub stream_handle: Option<OutputStreamHandle>, 
     pub app_handle: Option<AppHandle>,
+    pub current_path: Option<String>,
 }
+
+// Sink and OutputStreamHandle are Send. The OutputStream itself is not.
+// By leaking the OutputStream and only storing its handle, AudioState becomes Send.
+unsafe impl Send for AudioState {}
 
 impl AudioState {
     pub fn new() -> Self {
+        // match on try_default.
+        // We MUST keep the stream alive, but we can't store it in tauri::State (requires Send).
+        // Since we want it to live for the app duration, we leak it.
         let (stream, stream_handle) = match OutputStream::try_default() {
             Ok((s, h)) => (Some(s), Some(h)),
             Err(_) => (None, None),
         };
+        
+        if let Some(s) = stream {
+            // Leak the stream to keep it alive without dropping it.
+            Box::leak(Box::new(s));
+        }
+
         let sink = if let Some(ref h) = stream_handle {
-            Sink::try_new(h).ok()
+             Sink::try_new(h).ok()
         } else {
             None
         };
 
         Self {
-            stream,
             stream_handle,
             sink,
             app_handle: None,
+            current_path: None,
         }
     }
 }
@@ -57,8 +69,8 @@ where
         Self {
             input,
             sender,
-            buffer: Vec::with_capacity(2048), // Adjust for FFT size
-            buffer_size: 2048,
+            buffer: Vec::with_capacity(1024),
+            buffer_size: 1024,
         }
     }
 }
@@ -71,14 +83,13 @@ where
 
     fn next(&mut self) -> Option<Self::Item> {
         let sample = self.input.next()?;
-
+        
         self.buffer.push(sample);
         if self.buffer.len() >= self.buffer_size {
-            // Send a copy for FFT
             let _ = self.sender.send(self.buffer.clone());
             self.buffer.clear();
         }
-
+        
         Some(sample)
     }
 }
@@ -87,8 +98,8 @@ impl<I> Source for VisualizerSource<I>
 where
     I: Source<Item = f32> + Send,
 {
-    fn current_span_len(&self) -> Option<usize> {
-        self.input.current_span_len()
+    fn current_frame_len(&self) -> Option<usize> {
+        self.input.current_frame_len()
     }
 
     fn channels(&self) -> u16 {
@@ -104,6 +115,53 @@ where
     }
 }
 
+fn setup_sink_and_play(
+    sink: &Sink,
+    app_handle: AppHandle,
+    path: &str,
+    skip_seconds: f32,
+) -> Result<(), String> {
+    let file = File::open(path).map_err(|e| e.to_string())?;
+    let reader = BufReader::new(file);
+    let source = Decoder::new(reader).map_err(|e| e.to_string())?;
+    
+    // rodio 0.17 convert_samples
+    let source_f32 = source.convert_samples::<f32>();
+    
+    // Skip if seeking
+    let source_skipped = source_f32.skip_duration(Duration::from_secs_f32(skip_seconds));
+
+    let (tx, mut rx) = broadcast::channel(16);
+    
+    let viz_source = VisualizerSource::new(source_skipped, tx);
+    
+    sink.append(viz_source);
+    sink.play();
+
+    tauri::async_runtime::spawn(async move {
+        while let Ok(samples) = rx.recv().await {
+             let spectrum = samples_fft_to_spectrum(
+                 &samples,
+                 44100, 
+                 FrequencyLimit::Range(20., 20000.),
+                 Some(&divide_by_N),
+             );
+
+             if let Ok(spec) = spectrum {
+                 let mut data: Vec<f32> = spec.data().iter().map(|(_, val)| val.val()).collect();
+                 if data.len() > 100 {
+                     data.truncate(100); 
+                 }
+                 
+                 let _ = app_handle.emit("spectrum-update", data);
+             }
+        }
+    });
+    
+    Ok(())
+}
+
+
 #[tauri::command]
 pub async fn play_track(
     app: AppHandle,
@@ -112,71 +170,18 @@ pub async fn play_track(
 ) -> Result<(), String> {
     let mut audio = state.lock().map_err(|_| "Failed to lock audio state")?;
     audio.app_handle = Some(app.clone());
-
-    // Stop existing sink
-    if let Some(ref sink) = audio.sink {
-        if !sink.empty() {
-            // To stop effectively, we replace the sink or pause.
-            // Rodio sink doesn't clear easily without recreating.
-        }
-    }
-
-    // Re-initialize sink to clear queue
+    audio.current_path = Some(path.clone());
+    
+    // Reset sink
     if let Some(ref handle) = audio.stream_handle {
-        let new_sink = Sink::try_new(handle).map_err(|e| e.to_string())?;
-        audio.sink = Some(new_sink);
+         let new_sink = Sink::try_new(handle).map_err(|e| e.to_string())?;
+         audio.sink = Some(new_sink);
     }
 
     if let Some(ref sink) = audio.sink {
-        let file = File::open(&path).map_err(|e| e.to_string())?;
-        let reader = BufReader::new(file);
-        let source = Decoder::new(reader).map_err(|e| e.to_string())?;
-
-        // Convert samples to f32 for spectrum analyzer
-        let source_f32 = source.convert_samples::<f32>();
-
-        // Setup channel for Visualizer
-        let (tx, mut rx) = broadcast::channel(16);
-
-        let viz_source = VisualizerSource::new(source_f32, tx);
-
-        sink.append(viz_source);
-        sink.play();
-
-        // Spawn FFT worker
-        let app_handle_clone = app.clone();
-        tauri::async_runtime::spawn(async move {
-            while let Ok(samples) = rx.recv().await {
-                // Run FFT
-                // Samples should be power of 2, e.g. 2048
-                // Spectrum analyzer expects Map<Frequency, Value>
-                let spectrum = samples_fft_to_spectrum(
-                    &samples,
-                    44100, // Assuming 44.1kHz, ideally get from source info but simplified here
-                    FrequencyLimit::Range(20., 20000.),
-                    Some(&hann_window), // Apply Hann window
-                    Some(&divide_by_N),
-                );
-
-                if let Ok(spec) = spectrum {
-                    // Convert to simple array for frontend
-                    // We just want magnitudes.
-                    // The spectrum is a map of frequency -> Complex/Value.
-                    // Let's simplified: take values, sort by freq, downsample to ~100 bars?
-                    // Or just send raw average magnitudes.
-
-                    let mut data: Vec<f32> = spec.data().iter().map(|(_, val)| val.val()).collect();
-                    // Cap data size to avoid sending too much?
-                    if data.len() > 100 {
-                        data.truncate(100);
-                    }
-
-                    let _ = app_handle_clone.emit("spectrum-update", data);
-                }
-            }
-        });
+        setup_sink_and_play(sink, app.clone(), &path, 0.0)?;
     }
-
+    
     Ok(())
 }
 
@@ -199,12 +204,25 @@ pub fn resume_track(state: State<'_, Mutex<AudioState>>) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn seek_track(state: State<'_, Mutex<AudioState>>, seconds: f32) -> Result<(), String> {
-    let audio = state.lock().map_err(|_| "Failed to lock audio state")?;
-    if let Some(ref sink) = audio.sink {
-        sink.try_seek(Duration::from_secs_f32(seconds))
-            .map_err(|e| e.to_string())?;
+pub fn seek_track(app: AppHandle, state: State<'_, Mutex<AudioState>>, seconds: f32) -> Result<(), String> {
+    let mut audio = state.lock().map_err(|_| "Failed to lock audio state")?;
+    
+    let path = if let Some(ref p) = audio.current_path {
+        p.clone()
+    } else {
+        return Ok(()); // Nothing playing
+    };
+
+    // Recreate sink to clear current buffer and seek
+    if let Some(ref handle) = audio.stream_handle {
+         let new_sink = Sink::try_new(handle).map_err(|e| e.to_string())?;
+         audio.sink = Some(new_sink);
     }
+    
+    if let Some(ref sink) = audio.sink {
+        setup_sink_and_play(sink, app.clone(), &path, seconds)?;
+    }
+    
     Ok(())
 }
 

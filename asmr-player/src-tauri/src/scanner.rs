@@ -54,7 +54,7 @@ pub async fn scan_library(
             let dir_name = path.file_name().unwrap_or_default().to_string_lossy();
             let mut is_work = false;
             let mut rj_code: Option<String> = None;
-            let mut title = dir_name.to_string();
+            let title = dir_name.to_string();
 
             // 1. Check RJ Code
             if let Some(caps) = rj_regex.captures(&dir_name) {
