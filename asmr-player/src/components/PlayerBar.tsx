@@ -11,6 +11,7 @@ export function PlayerBar() {
     const [volume, setVolume] = useState(1.0);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0); // Mock duration for now, ideally from track metadata
+    const [isSeeking, setIsSeeking] = useState(false);
 
     const togglePlay = async () => {
         if (isPlaying) {
@@ -88,16 +89,21 @@ export function PlayerBar() {
     // Timer for smooth UI updates - Pure Frontend Approach
     useEffect(() => {
         let interval: ReturnType<typeof setInterval>;
-        if (isPlaying) {
+        if (isPlaying && !isSeeking) {
             interval = setInterval(() => {
                 setCurrentTime(prev => {
+                    // Auto-Play Logic
+                    if (duration > 0 && prev >= duration) {
+                        playNext();
+                        return 0; // Reset visual timer immediately while next track loads
+                    }
                     if (prev >= duration) return prev;
                     return prev + 1;
                 });
             }, 1000);
         }
         return () => clearInterval(interval);
-    }, [isPlaying, duration]);
+    }, [isPlaying, duration, isSeeking, playNext]);
 
     // Backend sync listeners - COMMENTED OUT TO FIX FLICKERING
     /*
@@ -149,12 +155,14 @@ export function PlayerBar() {
 
     const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = parseFloat(e.target.value);
+        setIsSeeking(true); // Pause timer
         setCurrentTime(val); // Update UI immediately
-        // Note: Timer will logically continue adding +1 from this new value on next tick
     };
 
     const handleSeekCommit = async () => {
         await invoke('seek_track', { seconds: currentTime });
+        // Small delay before resuming timer to allow backend to catch up
+        setTimeout(() => setIsSeeking(false), 200);
     };
 
     const formatTime = (sec: number) => {

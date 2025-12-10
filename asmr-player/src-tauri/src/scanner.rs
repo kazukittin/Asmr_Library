@@ -83,7 +83,12 @@ pub async fn scan_library(
 
             if is_work {
                 let path_str = path.to_string_lossy().to_string();
-                let cover_path = find_cover_image(path);
+                let mut cover_path = find_cover_image(path);
+                
+                // Fallback: Try to extract from audio file metadata
+                if cover_path.is_none() {
+                    cover_path = extract_embedded_cover(path);
+                }
 
                 let existing_id: Option<i64> = sqlx::query("SELECT id FROM works WHERE dir_path = ?")
                     .bind(&path_str)
@@ -191,6 +196,59 @@ fn find_cover_image(path: &Path) -> Option<String> {
     }
 
     best_candidate.map(|(_, p)| p.to_string_lossy().to_string())
+}
+
+fn extract_embedded_cover(dir_path: &Path) -> Option<String> {
+    // 1. Check if we already have an extracted cover
+    if let Ok(entries) = fs::read_dir(dir_path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() {
+                let name = p.file_name().unwrap_or_default().to_string_lossy();
+                if name.starts_with("cover_extracted") {
+                    return Some(p.to_string_lossy().to_string());
+                }
+            }
+        }
+    }
+
+    // 2. Scan audio files for embedded pictures
+    if let Ok(entries) = fs::read_dir(dir_path) {
+        for entry in entries.flatten() {
+            let p = entry.path();
+            if p.is_file() {
+                if let Some(ext) = p.extension() {
+                    let ext_str = ext.to_string_lossy().to_lowercase();
+                    // Prioritize formats likely to have tags
+                    if ["mp3", "flac", "m4a", "ogg", "opus"].contains(&ext_str.as_str()) {
+                         if let Ok(tagged_file) = read_from_path(&p) {
+                             // Check all tags for pictures
+                             for tag in tagged_file.tags() {
+                                 if let Some(pic) = tag.pictures().first() {
+                                     let save_ext = if let Some(mime) = pic.mime_type() {
+                                         // MimeType is an enum, convert to string
+                                         let s = format!("{:?}", mime).to_lowercase();
+                                         if s.contains("png") { "png" } else { "jpg" }
+                                     } else {
+                                         "jpg"
+                                     };
+                                     
+                                     let cover_filename = format!("cover_extracted.{}", save_ext);
+                                     let save_path = dir_path.join(&cover_filename);
+                                     
+                                     if fs::write(&save_path, pic.data()).is_ok() {
+                                         println!("Extracted cover to: {:?}", save_path);
+                                         return Some(save_path.to_string_lossy().to_string());
+                                     }
+                                 }
+                             }
+                         }
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 async fn scan_tracks(work_id: i64, path: &Path, pool: &SqlitePool) -> Result<(), sqlx::Error> {
