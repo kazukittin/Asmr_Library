@@ -85,37 +85,46 @@ export function PlayerBar() {
         }
     }, [isPlaying]);
 
-    // Timer for smooth UI updates
+    // Timer for smooth UI updates - Pure Frontend Approach
     useEffect(() => {
         let interval: ReturnType<typeof setInterval>;
         if (isPlaying) {
             interval = setInterval(() => {
-                setCurrentTime(t => {
-                    const next = t + 1;
-                    return next > duration ? duration : next;
+                setCurrentTime(prev => {
+                    if (prev >= duration) return prev;
+                    return prev + 1;
                 });
             }, 1000);
         }
         return () => clearInterval(interval);
     }, [isPlaying, duration]);
 
-    // Backend sync listeners
+    // Backend sync listeners - COMMENTED OUT TO FIX FLICKERING
+    /*
     useEffect(() => {
         const unlistenProgress = listen<number>('playback-progress', (event) => {
-            // Sync with backend if drift is large (>2s) to avoid jumping
-            const remoteTime = event.payload;
-            setCurrentTime(prev => {
-                if (Math.abs(prev - remoteTime) > 2) return remoteTime;
-                return prev;
-            });
+             // Sync with backend if drift is large (>2s) to avoid jumping
+             const remoteTime = event.payload;
+             setCurrentTime(prev => {
+                 if (Math.abs(prev - remoteTime) > 2) return remoteTime;
+                 return prev;
+             });
         });
-
-        const unlistenDuration = listen<number>('track-duration', (event) => {
-            setDuration(event.payload);
-        });
-
+        
         return () => {
-            unlistenProgress.then(f => f());
+             unlistenProgress.then(f => f());
+        }
+    }, []);
+    */
+
+    // Only listen for duration for now
+    useEffect(() => {
+        const unlistenDuration = listen<number>('track-duration', (event) => {
+            // Fallback to 180 if 0 reported
+            const d = event.payload;
+            setDuration(d > 0 ? d : 180);
+        });
+        return () => {
             unlistenDuration.then(f => f());
         }
     }, []);
@@ -140,7 +149,8 @@ export function PlayerBar() {
 
     const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = parseFloat(e.target.value);
-        setCurrentTime(val);
+        setCurrentTime(val); // Update UI immediately
+        // Note: Timer will logically continue adding +1 from this new value on next tick
     };
 
     const handleSeekCommit = async () => {
@@ -196,7 +206,7 @@ export function PlayerBar() {
                         <input
                             type="range"
                             min="0"
-                            max={duration || 100}
+                            max={duration || 1} // Prevent 0 max
                             value={currentTime}
                             onChange={handleSeek}
                             onMouseUp={handleSeekCommit}

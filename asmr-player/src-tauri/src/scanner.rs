@@ -2,8 +2,9 @@ use regex::Regex;
 use sqlx::SqlitePool;
 use std::fs;
 use std::path::{Path, PathBuf};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Emitter};
 use walkdir::WalkDir;
+use lofty::{read_from_path, prelude::*};
 
 #[tauri::command]
 pub async fn scan_library(
@@ -210,12 +211,29 @@ async fn scan_tracks(work_id: i64, path: &Path, pool: &SqlitePool) -> Result<(),
                         .to_string();
                     let path_str = p.to_string_lossy().to_string();
 
+                    // Extract Duration using Lofty
+                    let duration_sec = match read_from_path(p) {
+                        Ok(tagged_file) => tagged_file.properties().duration().as_secs() as i64,
+                        Err(e) => {
+                            eprintln!("Lofty Error on {}: {}", title, e);
+                            0
+                        }
+                    };
+
+                    // Log duration for debugging
+                    if duration_sec > 0 {
+                        println!("Scanned {}: {}s", title, duration_sec);
+                    } else {
+                        println!("Warning: Could not determine duration for {}", title);
+                    }
+
                     sqlx::query(
-                        "INSERT INTO tracks (work_id, title, path) VALUES (?, ?, ?)"
+                        "INSERT INTO tracks (work_id, title, path, duration_sec) VALUES (?, ?, ?, ?)"
                     )
                     .bind(work_id)
                     .bind(title)
                     .bind(path_str)
+                    .bind(duration_sec)
                     .execute(pool)
                     .await?;
                 }

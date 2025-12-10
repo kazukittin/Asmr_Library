@@ -3,7 +3,7 @@ mod scanner;
 
 use sqlx::sqlite::SqlitePoolOptions;
 use std::sync::Mutex;
-use tauri::{Listener, Manager};
+use tauri::Manager;
 use std::str::FromStr;
 
 #[tauri::command]
@@ -35,12 +35,13 @@ pub struct Track {
     work_id: i64,
     title: String,
     path: String,
-    duration: Option<i32>,
+    #[serde(rename = "duration")]
+    duration_sec: i64,
 }
 
 #[tauri::command]
 async fn get_work_tracks(pool: tauri::State<'_, sqlx::SqlitePool>, work_id: i64) -> Result<Vec<Track>, String> {
-    let tracks = sqlx::query_as::<_, Track>("SELECT id, work_id, title, path, duration_sec as duration FROM tracks WHERE work_id = ? ORDER BY title ASC")
+    let tracks = sqlx::query_as::<_, Track>("SELECT id, work_id, title, path, duration_sec FROM tracks WHERE work_id = ? ORDER BY title ASC")
         .bind(work_id)
         .fetch_all(pool.inner())
         .await
