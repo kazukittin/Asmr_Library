@@ -18,12 +18,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["protocol-asset"] }
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.8.6", features = ["runtime-tokio-rustls", "sqlite"] }
-rodio = { version = "0.17.3", features = ["minimp3", "vorbis", "wav", "flac"] }
+rodio = { version = "0.20.1", features = ["symphonia-all"] }
 lofty = "0.21" # Using improved metadata extraction
 spectrum-analyzer = "1.7.0"
 walkdir = "2.5.0"

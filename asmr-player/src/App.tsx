@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { PlayerBar } from './components/PlayerBar';
 import { WorkGrid } from './components/WorkGrid';
+import { TrackList } from './components/TrackList';
 import { Search } from 'lucide-react';
 
 function BrowserWarning() {
@@ -60,8 +61,11 @@ function App() {
             </div>
           </header>
 
+
           <WorkGrid />
         </main>
+
+        <TrackList />
       </div>
 
       <PlayerBar />

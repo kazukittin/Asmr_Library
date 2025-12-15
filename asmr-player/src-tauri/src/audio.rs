@@ -2,7 +2,7 @@ use rodio::{Decoder, OutputStream, Sink, Source, OutputStreamHandle};
 use spectrum_analyzer::scaling::divide_by_N;
 use spectrum_analyzer::{samples_fft_to_spectrum, FrequencyLimit};
 use std::fs::File;
-use std::io::BufReader;
+use std::io::Cursor;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 use tauri::{AppHandle, Emitter, State};
@@ -11,7 +11,7 @@ use tokio::sync::broadcast;
 pub struct AudioState {
     pub sink: Option<Sink>,
     // stream is !Send, so we don't store it here. We leak it in new().
-    pub stream_handle: Option<OutputStreamHandle>, 
+    pub stream_handle: Option<OutputStreamHandle>,
     pub app_handle: Option<AppHandle>,
     pub current_path: Option<String>,
 }
@@ -121,9 +121,28 @@ fn setup_sink_and_play(
     path: &str,
     skip_seconds: f32,
 ) -> Result<(), String> {
-    let file = File::open(path).map_err(|e| e.to_string())?;
-    let reader = BufReader::new(file);
-    let source = Decoder::new(reader).map_err(|e| e.to_string())?;
+    println!("[Audio] Attempting to play: {}", path);
+    
+    // Read entire file to memory to prevent seek errors on initialization with Symphonia
+    let file_bytes = std::fs::read(path).map_err(|e| {
+        eprintln!("[Audio] Failed to read file: {}", e);
+        e.to_string()
+    })?;
+    
+    println!("[Audio] File read successfully, size: {} bytes", file_bytes.len());
+    
+    let cursor = Cursor::new(file_bytes);
+    let source_result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| Decoder::new(cursor)))
+        .map_err(|e| {
+            eprintln!("[Audio] Panic during audio decoding: {:?}", e);
+            "Panic during audio decoding".to_string()
+        })?;
+    let source = source_result.map_err(|e| {
+        eprintln!("[Audio] Decoder error: {}", e);
+        e.to_string()
+    })?;
+    
+    println!("[Audio] Decoder created successfully");
     
     // rodio 0.17 convert_samples
     let source_f32 = source.convert_samples::<f32>();
@@ -131,15 +150,19 @@ fn setup_sink_and_play(
     // Get metadata BEFORE consuming explicit source
     let sample_rate = source_f32.sample_rate();
     let channels = source_f32.channels();
-    let total_duration = source_f32.total_duration();
+    // let total_duration = source_f32.total_duration(); // Avoid calling this to prevent symphonia seek panic on m4a
 
-    // Emit duration
-    if let Some(duration) = total_duration {
-        let _ = app_handle.emit("track-duration", duration.as_secs_f64());
-    }
+    // Emit duration (Optional - The frontend relies on DB mostly now)
+    // if let Some(duration) = total_duration {
+    //    let _ = app_handle.emit("track-duration", duration.as_secs_f64());
+    // }
 
-    // Skip if seeking
-    let source_skipped = source_f32.skip_duration(Duration::from_secs_f32(skip_seconds));
+    // Skip if seeking (conditional to avoid panic on 0.0s skip with symphonia)
+    let source_skipped: Box<dyn Source<Item = f32> + Send> = if skip_seconds > 0.1 {
+        Box::new(source_f32.skip_duration(Duration::from_secs_f32(skip_seconds)))
+    } else {
+        Box::new(source_f32)
+    };
 
     // Set up channels for visualizer and progress
     // We increase buffer size to avoid lag? No, 16 is fine if we consume fast.
@@ -201,10 +224,17 @@ pub async fn play_track(
     state: State<'_, Mutex<AudioState>>,
     path: String,
 ) -> Result<(), String> {
-    let mut audio = state.lock().map_err(|_| "Failed to lock audio state")?;
+    let mut audio = match state.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => {
+            eprintln!("Audio mutex poisoned, recovering...");
+            poisoned.into_inner()
+        }
+    };
     audio.app_handle = Some(app.clone());
     audio.current_path = Some(path.clone());
     
+    // Reset sink
     // Reset sink
     if let Some(ref handle) = audio.stream_handle {
          let new_sink = Sink::try_new(handle).map_err(|e| e.to_string())?;
@@ -220,7 +250,10 @@ pub async fn play_track(
 
 #[tauri::command]
 pub fn pause_track(state: State<'_, Mutex<AudioState>>) -> Result<(), String> {
-    let audio = state.lock().map_err(|_| "Failed to lock audio state")?;
+    let audio = match state.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
     if let Some(ref sink) = audio.sink {
         sink.pause();
     }
@@ -229,7 +262,10 @@ pub fn pause_track(state: State<'_, Mutex<AudioState>>) -> Result<(), String> {
 
 #[tauri::command]
 pub fn resume_track(state: State<'_, Mutex<AudioState>>) -> Result<(), String> {
-    let audio = state.lock().map_err(|_| "Failed to lock audio state")?;
+    let audio = match state.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
     if let Some(ref sink) = audio.sink {
         sink.play();
     }
@@ -238,7 +274,10 @@ pub fn resume_track(state: State<'_, Mutex<AudioState>>) -> Result<(), String> {
 
 #[tauri::command]
 pub fn seek_track(app: AppHandle, state: State<'_, Mutex<AudioState>>, seconds: f32) -> Result<(), String> {
-    let mut audio = state.lock().map_err(|_| "Failed to lock audio state")?;
+    let mut audio = match state.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
     
     let path = if let Some(ref p) = audio.current_path {
         p.clone()
@@ -246,6 +285,7 @@ pub fn seek_track(app: AppHandle, state: State<'_, Mutex<AudioState>>, seconds: 
         return Ok(()); // Nothing playing
     };
 
+    // Recreate sink to clear current buffer and seek
     // Recreate sink to clear current buffer and seek
     if let Some(ref handle) = audio.stream_handle {
          let new_sink = Sink::try_new(handle).map_err(|e| e.to_string())?;
@@ -261,7 +301,10 @@ pub fn seek_track(app: AppHandle, state: State<'_, Mutex<AudioState>>, seconds: 
 
 #[tauri::command]
 pub fn set_volume(state: State<'_, Mutex<AudioState>>, volume: f32) -> Result<(), String> {
-    let audio = state.lock().map_err(|_| "Failed to lock audio state")?;
+    let audio = match state.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
     if let Some(ref sink) = audio.sink {
         sink.set_volume(volume);
     }

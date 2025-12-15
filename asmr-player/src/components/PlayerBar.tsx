@@ -2,23 +2,105 @@ import { Play, Pause, SkipBack, SkipForward, Repeat, Shuffle, Volume2 } from 'lu
 import { usePlayerStore } from '../hooks/usePlayerStore';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { convertFileSrc } from '@tauri-apps/api/core';
+
+// Audio playback modes
+type PlaybackMode = 'rust' | 'web' | null;
 
 export function PlayerBar() {
     const { isPlaying, currentTrack, setIsPlaying, playNext, playPrev } = usePlayerStore();
     const canvasRef = useRef<HTMLCanvasElement>(null);
+    const audioRef = useRef<HTMLAudioElement | null>(null);
     const [volume, setVolume] = useState(1.0);
     const [currentTime, setCurrentTime] = useState(0);
-    const [duration, setDuration] = useState(0); // Mock duration for now, ideally from track metadata
+    const [duration, setDuration] = useState(0);
     const [isSeeking, setIsSeeking] = useState(false);
+    const [playbackMode, setPlaybackMode] = useState<PlaybackMode>(null);
+
+    // Initialize HTML Audio element
+    useEffect(() => {
+        if (!audioRef.current) {
+            audioRef.current = new Audio();
+            audioRef.current.addEventListener('timeupdate', () => {
+                if (audioRef.current && !isSeeking) {
+                    setCurrentTime(audioRef.current.currentTime);
+                }
+            });
+            audioRef.current.addEventListener('loadedmetadata', () => {
+                if (audioRef.current) {
+                    setDuration(audioRef.current.duration);
+                }
+            });
+            audioRef.current.addEventListener('ended', () => {
+                playNext();
+            });
+            audioRef.current.addEventListener('error', (e) => {
+                console.error('[Web Audio] Playback error:', e);
+            });
+        }
+        return () => {
+            if (audioRef.current) {
+                audioRef.current.pause();
+                audioRef.current = null;
+            }
+        };
+    }, []);
+
+    // Sync volume to web audio
+    useEffect(() => {
+        if (audioRef.current) {
+            audioRef.current.volume = volume;
+        }
+    }, [volume]);
+
+    const stopAllPlayback = useCallback(async () => {
+        // Stop Rust backend
+        try {
+            await invoke('pause_track');
+        } catch (e) { /* ignore */ }
+        // Stop Web Audio
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current.currentTime = 0;
+        }
+    }, []);
+
+    const playWithWebAudio = useCallback((path: string) => {
+        if (!audioRef.current) {
+            console.error('[Web Audio] audioRef is null!');
+            return;
+        }
+        const src = convertFileSrc(path);
+        console.log('[Web Audio] Playing:', path);
+        console.log('[Web Audio] Converted URL:', src);
+        audioRef.current.src = src;
+        audioRef.current.volume = volume;
+        audioRef.current.play()
+            .then(() => {
+                console.log('[Web Audio] Playback started successfully');
+                setPlaybackMode('web');
+                setIsPlaying(true);
+            })
+            .catch((e) => {
+                console.error('[Web Audio] Failed to play:', e);
+            });
+    }, [volume, setIsPlaying]);
 
     const togglePlay = async () => {
         if (isPlaying) {
-            await invoke('pause_track');
+            if (playbackMode === 'rust') {
+                await invoke('pause_track');
+            } else if (playbackMode === 'web' && audioRef.current) {
+                audioRef.current.pause();
+            }
             setIsPlaying(false);
         } else {
-            await invoke('resume_track');
+            if (playbackMode === 'rust') {
+                await invoke('resume_track');
+            } else if (playbackMode === 'web' && audioRef.current) {
+                audioRef.current.play();
+            }
             setIsPlaying(true);
         }
     };
@@ -26,12 +108,15 @@ export function PlayerBar() {
     const handleVolumeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const v = parseFloat(e.target.value);
         setVolume(v);
-        await invoke('set_volume', { volume: v });
+        if (playbackMode === 'rust') {
+            await invoke('set_volume', { volume: v });
+        }
+        if (audioRef.current) {
+            audioRef.current.volume = v;
+        }
     };
 
-
-
-    // Visualizer logic (Real)
+    // Visualizer logic (Real) - Only works with Rust backend
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -39,7 +124,6 @@ export function PlayerBar() {
         if (!ctx) return;
 
         let animationId: number;
-        // Spectrum data buffer
         let spectrumData: number[] = new Array(100).fill(0);
 
         const unlisten = listen<number[]>('spectrum-update', (event) => {
@@ -68,11 +152,7 @@ export function PlayerBar() {
 
             for (let i = 0; i < bars; i++) {
                 const val = spectrumData[i];
-                // Scaling: Logarithmic scale might be better, but linear for MVP is ok.
-                // spectrum-analyzer values can be small.
-                const h = val * 5.0 * canvas.height; // Arbitrary gain
-
-                // Smooth falloff could be implemented here if data comes too slow
+                const h = val * 5.0 * canvas.height;
                 ctx.fillRect(i * w, canvas.height - h, w - 1, h);
             }
             animationId = requestAnimationFrame(draw);
@@ -86,16 +166,15 @@ export function PlayerBar() {
         }
     }, [isPlaying]);
 
-    // Timer for smooth UI updates - Pure Frontend Approach
+    // Timer for Rust backend progress (only when using rust mode)
     useEffect(() => {
         let interval: ReturnType<typeof setInterval>;
-        if (isPlaying && !isSeeking) {
+        if (isPlaying && !isSeeking && playbackMode === 'rust') {
             interval = setInterval(() => {
                 setCurrentTime(prev => {
-                    // Auto-Play Logic
                     if (duration > 0 && prev >= duration) {
                         playNext();
-                        return 0; // Reset visual timer immediately while next track loads
+                        return 0;
                     }
                     if (prev >= duration) return prev;
                     return prev + 1;
@@ -103,65 +182,56 @@ export function PlayerBar() {
             }, 1000);
         }
         return () => clearInterval(interval);
-    }, [isPlaying, duration, isSeeking, playNext]);
+    }, [isPlaying, duration, isSeeking, playNext, playbackMode]);
 
-    // Backend sync listeners - COMMENTED OUT TO FIX FLICKERING
-    /*
-    useEffect(() => {
-        const unlistenProgress = listen<number>('playback-progress', (event) => {
-             // Sync with backend if drift is large (>2s) to avoid jumping
-             const remoteTime = event.payload;
-             setCurrentTime(prev => {
-                 if (Math.abs(prev - remoteTime) > 2) return remoteTime;
-                 return prev;
-             });
-        });
-        
-        return () => {
-             unlistenProgress.then(f => f());
-        }
-    }, []);
-    */
-
-    // Only listen for duration for now
-    useEffect(() => {
-        const unlistenDuration = listen<number>('track-duration', (event) => {
-            // Fallback to 180 if 0 reported
-            const d = event.payload;
-            setDuration(d > 0 ? d : 180);
-        });
-        return () => {
-            unlistenDuration.then(f => f());
-        }
-    }, []);
-
-    // Play track when currentTrack changes
+    // Play track when currentTrack changes - Hybrid approach
     useEffect(() => {
         if (currentTrack && currentTrack.path) {
             // Reset state
             setCurrentTime(0);
             setDuration(currentTrack.duration || 0);
+            setPlaybackMode(null);
 
-            invoke('play_track', { path: currentTrack.path })
-                .then(() => {
-                    setIsPlaying(true);
-                    invoke('set_volume', { volume });
-                })
-                .catch(console.error);
+            // Stop any previous playback
+            stopAllPlayback().then(() => {
+                // Check file extension - use Web Audio for m4a/mp4 files
+                const ext = currentTrack.path.split('.').pop()?.toLowerCase();
+                const useWebAudio = ['m4a', 'mp4', 'aac'].includes(ext || '');
+
+                if (useWebAudio) {
+                    console.log('[Audio] Using Web Audio for:', ext);
+                    playWithWebAudio(currentTrack.path);
+                } else {
+                    // Try Rust backend for other formats
+                    invoke('play_track', { path: currentTrack.path })
+                        .then(() => {
+                            console.log('[Rust Audio] Playing successfully');
+                            setPlaybackMode('rust');
+                            setIsPlaying(true);
+                            invoke('set_volume', { volume });
+                        })
+                        .catch((err) => {
+                            console.warn('[Rust Audio] Failed, falling back to Web Audio:', err);
+                            // Fallback to Web Audio API
+                            playWithWebAudio(currentTrack.path);
+                        });
+                }
+            });
         }
     }, [currentTrack]);
 
-
-
     const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = parseFloat(e.target.value);
-        setIsSeeking(true); // Pause timer
-        setCurrentTime(val); // Update UI immediately
+        setIsSeeking(true);
+        setCurrentTime(val);
     };
 
     const handleSeekCommit = async () => {
-        await invoke('seek_track', { seconds: currentTime });
-        // Small delay before resuming timer to allow backend to catch up
+        if (playbackMode === 'rust') {
+            await invoke('seek_track', { seconds: currentTime });
+        } else if (playbackMode === 'web' && audioRef.current) {
+            audioRef.current.currentTime = currentTime;
+        }
         setTimeout(() => setIsSeeking(false), 200);
     };
 
@@ -170,8 +240,6 @@ export function PlayerBar() {
         const s = Math.floor(sec % 60);
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
     };
-
-    // ... (keep Visualizer logic) ...
 
     const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
@@ -188,6 +256,9 @@ export function PlayerBar() {
                         <div className="flex flex-col overflow-hidden">
                             <span className="text-sm font-bold text-white truncate cursor-pointer hover:underline decoration-accent">{currentTrack.title}</span>
                             <span className="text-xs text-gray-400 truncate mt-0.5">{currentTrack.work_title || "作品名未設定"}</span>
+                            {playbackMode === 'web' && (
+                                <span className="text-[10px] text-purple-400">🌐 Web Audio</span>
+                            )}
                         </div>
                     </>
                 )}
@@ -214,7 +285,7 @@ export function PlayerBar() {
                         <input
                             type="range"
                             min="0"
-                            max={duration || 1} // Prevent 0 max
+                            max={duration || 1}
                             value={currentTime}
                             onChange={handleSeek}
                             onMouseUp={handleSeekCommit}
@@ -253,3 +324,4 @@ export function PlayerBar() {
         </footer>
     );
 }
+

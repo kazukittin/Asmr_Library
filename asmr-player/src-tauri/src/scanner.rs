@@ -150,7 +150,7 @@ fn contains_audio_files(path: &Path) -> bool {
         for entry in entries.flatten() {
             if let Some(ext) = entry.path().extension() {
                 let ext_str = ext.to_string_lossy().to_lowercase();
-                if ["mp3", "wav", "flac", "m4a", "ogg"].contains(&ext_str.as_str()) {
+                if ["mp3", "wav", "flac", "m4a", "mp4", "ogg"].contains(&ext_str.as_str()) {
                     return true;
                 }
             }
@@ -261,7 +261,7 @@ async fn scan_tracks(work_id: i64, path: &Path, pool: &SqlitePool) -> Result<(),
         if p.is_file() {
             if let Some(ext) = p.extension() {
                 let ext_str = ext.to_string_lossy().to_lowercase();
-                if ["mp3", "wav", "flac", "m4a", "ogg"].contains(&ext_str.as_str()) {
+                if ["mp3", "wav", "flac", "m4a", "mp4", "ogg"].contains(&ext_str.as_str()) {
                     let title = p
                         .file_stem()
                         .unwrap_or_default()
