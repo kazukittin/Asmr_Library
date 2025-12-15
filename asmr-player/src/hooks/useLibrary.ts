@@ -8,6 +8,9 @@ export interface Work {
     title: string;
     dir_path: string;
     cover_path: string | null;
+    tags?: string; // Comma separated
+    voice_actors?: string; // Comma separated
+    circles?: string; // Comma separated
 }
 
 export function useLibrary() {

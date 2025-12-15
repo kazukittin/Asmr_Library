@@ -1,11 +1,14 @@
-import { Play } from 'lucide-react';
+import { Play, Edit2 } from 'lucide-react';
 import { useLibrary, Work } from '../hooks/useLibrary';
 import { usePlayerStore } from '../hooks/usePlayerStore';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { MetadataEditor } from './MetadataEditor';
+import { useState } from 'react';
 
 export function WorkGrid() {
-    const { works, loading } = useLibrary();
+    const { works, loading, refetch } = useLibrary();
     const { setTrack, setQueue } = usePlayerStore();
+    const [editingWork, setEditingWork] = useState<Work | null>(null);
 
     const handlePlay = async (work: Work) => {
         try {
@@ -57,7 +60,7 @@ export function WorkGrid() {
                                 className="w-full h-full object-cover transition duration-700 group-hover:scale-110 opacity-90 group-hover:opacity-100"
                             />
 
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center backdrop-blur-[2px]">
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center backdrop-blur-[2px] gap-2">
                                 <button
                                     className="w-12 h-12 rounded-full bg-accent text-white flex items-center justify-center shadow-[0_0_15px_rgba(168,85,247,0.6)] hover:scale-105 transition-transform"
                                     onClick={(e) => {
@@ -67,13 +70,38 @@ export function WorkGrid() {
                                 >
                                     <Play className="w-5 h-5 ml-1" />
                                 </button>
+
+                                <button
+                                    className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-all backdrop-blur-sm"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setEditingWork(work);
+                                    }}
+                                    title="情報を編集"
+                                >
+                                    <Edit2 className="w-4 h-4" />
+                                </button>
                             </div>
 
                             <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
                                 {work.rj_code && (
-                                    <span className="bg-black/80 backdrop-blur-md text-[10px] font-bold text-pink-400 px-2 py-0.5 rounded border border-pink-500/30">
+                                    <button
+                                        className="bg-black/80 backdrop-blur-md text-[10px] font-bold text-pink-400 px-2 py-0.5 rounded border border-pink-500/30 hover:bg-pink-500 hover:text-white transition-colors cursor-pointer z-20"
+                                        onClick={async (e) => {
+                                            e.stopPropagation();
+                                            if (confirm(`'${work.title}' の情報をDLsiteから取得しますか？`)) {
+                                                try {
+                                                    await invoke('scrape_work_metadata', { workId: work.id });
+                                                    refetch(); // Use refetch from hook
+                                                } catch (err) {
+                                                    alert(`エラー: ${err}`);
+                                                }
+                                            }
+                                        }}
+                                        title="DLsiteから情報を取得"
+                                    >
                                         DLsite
-                                    </span>
+                                    </button>
                                 )}
                             </div>
                         </div>
@@ -82,18 +110,40 @@ export function WorkGrid() {
                             <h3 className="text-sm font-bold text-gray-200 truncate group-hover:text-accent transition-colors">
                                 {work.title}
                             </h3>
-                            <div className="flex justify-between items-center mt-1">
-                                <p className="text-xs text-gray-400 truncate">声優未設定</p>
+                            <div className="flex justify-between items-center mt-1 text-xs">
+                                <p className="text-gray-400 truncate max-w-[70%]">
+                                    {work.voice_actors || work.circles || "Circle/CV 未設定"}
+                                </p>
                                 {work.rj_code && (
                                     <span className="text-[10px] text-gray-600 font-mono bg-white/5 px-1 rounded">
                                         {work.rj_code}
                                     </span>
                                 )}
                             </div>
+                            {work.tags && (
+                                <div className="flex flex-wrap gap-1 mt-1.5 overflow-hidden h-4">
+                                    {work.tags.split(',').slice(0, 3).map((tag, i) => (
+                                        <span key={i} className="text-[9px] text-gray-400 bg-white/5 px-1.5 rounded-sm whitespace-nowrap">
+                                            {tag.trim()}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
                         </div>
                     </div>
                 ))}
             </div>
+
+            {editingWork && (
+                <MetadataEditor
+                    work={editingWork}
+                    isOpen={!!editingWork}
+                    onClose={() => setEditingWork(null)}
+                    onSave={() => {
+                        refetch();
+                    }}
+                />
+            )}
         </div>
     );
 }
