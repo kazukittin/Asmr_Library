@@ -12,16 +12,52 @@ export function PlayerBar() {
     const { isPlaying, currentTrack, setIsPlaying, playNext, playPrev } = usePlayerStore();
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
+    // Add Web Audio Context refs
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const analyserRef = useRef<AnalyserNode | null>(null);
+    const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
+
     const [volume, setVolume] = useState(1.0);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [isSeeking, setIsSeeking] = useState(false);
     const [playbackMode, setPlaybackMode] = useState<PlaybackMode>(null);
 
+    // Initialize Web Audio Context
+    const initAudioContext = useCallback(() => {
+        if (!audioRef.current) return;
+
+        if (!audioContextRef.current) {
+            const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+            audioContextRef.current = new AudioContextClass();
+        }
+
+        const ctx = audioContextRef.current;
+
+        // Create source node only once
+        if (!sourceNodeRef.current) {
+            sourceNodeRef.current = ctx.createMediaElementSource(audioRef.current);
+            analyserRef.current = ctx.createAnalyser();
+            analyserRef.current.fftSize = 256; // 128 bins
+
+            // Connect: Source -> Analyser -> Destination
+            sourceNodeRef.current.connect(analyserRef.current);
+            analyserRef.current.connect(ctx.destination);
+        }
+
+        // Resume context if suspended (policy)
+        if (ctx.state === 'suspended') {
+            ctx.resume();
+        }
+    }, []);
+
     // Initialize HTML Audio element
     useEffect(() => {
         if (!audioRef.current) {
             audioRef.current = new Audio();
+            // Allow crossOrigin for Web Audio if needed (for local files usually not needed but good practice)
+            audioRef.current.crossOrigin = "anonymous";
+
             audioRef.current.addEventListener('timeupdate', () => {
                 if (audioRef.current && !isSeeking) {
                     setCurrentTime(audioRef.current.currentTime);
@@ -38,14 +74,22 @@ export function PlayerBar() {
             audioRef.current.addEventListener('error', (e) => {
                 console.error('[Web Audio] Playback error:', e);
             });
+
+            // Initialize AudioContext when audio element is ready
+            // Note: browser policy requires user interaction before resume, but we can setup
+            initAudioContext();
         }
         return () => {
             if (audioRef.current) {
                 audioRef.current.pause();
                 audioRef.current = null;
             }
+            if (audioContextRef.current) {
+                audioContextRef.current.close();
+                audioContextRef.current = null;
+            }
         };
-    }, []);
+    }, [initAudioContext, playNext]);
 
     // Sync volume to web audio
     useEffect(() => {
@@ -62,7 +106,6 @@ export function PlayerBar() {
         // Stop Web Audio
         if (audioRef.current) {
             audioRef.current.pause();
-            audioRef.current.currentTime = 0;
         }
     }, []);
 
@@ -71,9 +114,15 @@ export function PlayerBar() {
             console.error('[Web Audio] audioRef is null!');
             return;
         }
+
+        // Ensure context is running
+        if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+            audioContextRef.current.resume();
+        }
+
         const src = convertFileSrc(path);
         console.log('[Web Audio] Playing:', path);
-        console.log('[Web Audio] Converted URL:', src);
+        // console.log('[Web Audio] Converted URL:', src); 
         audioRef.current.src = src;
         audioRef.current.volume = volume;
         audioRef.current.play()
@@ -99,6 +148,9 @@ export function PlayerBar() {
             if (playbackMode === 'rust') {
                 await invoke('resume_track');
             } else if (playbackMode === 'web' && audioRef.current) {
+                if (audioContextRef.current && audioContextRef.current.state === 'suspended') {
+                    audioContextRef.current.resume();
+                }
                 audioRef.current.play();
             }
             setIsPlaying(true);
@@ -116,7 +168,7 @@ export function PlayerBar() {
         }
     };
 
-    // Visualizer logic (Real) - Only works with Rust backend
+    // Visualizer logic (Unified)
     useEffect(() => {
         const canvas = canvasRef.current;
         if (!canvas) return;
@@ -126,8 +178,13 @@ export function PlayerBar() {
         let animationId: number;
         let spectrumData: number[] = new Array(100).fill(0);
 
+        // Web Audio Data Buffer
+        let webAudioDataArray: Uint8Array;
+
         const unlisten = listen<number[]>('spectrum-update', (event) => {
-            spectrumData = event.payload;
+            if (playbackMode === 'rust') {
+                spectrumData = event.payload;
+            }
         });
 
         const resize = () => {
@@ -142,7 +199,36 @@ export function PlayerBar() {
         const draw = () => {
             if (!ctx) return;
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const bars = spectrumData.length;
+
+            let bars = spectrumData.length;
+            let currentData = spectrumData;
+
+            // Fetch Web Audio Data if in web mode
+            if (playbackMode === 'web' && analyserRef.current) {
+                const analyser = analyserRef.current;
+                const bufferLength = analyser.frequencyBinCount;
+                if (!webAudioDataArray || webAudioDataArray.length !== bufferLength) {
+                    webAudioDataArray = new Uint8Array(bufferLength);
+                }
+                analyser.getByteFrequencyData(webAudioDataArray as any);
+
+                // Normalize 0-255 to 0.0-1.0 like Rust backend
+                // Also take a subset (lower frequencies are usually more interesting)
+                // Or just use the whole thing but downsample?
+                // Let's just create a float array matching the size we want (e.g. 64 bars)
+                const showBars = 64;
+                const step = Math.floor(bufferLength / showBars);
+
+                const webSpectrum: number[] = [];
+                for (let i = 0; i < showBars; i++) {
+                    // Simple downsampling or averaging
+                    const val = webAudioDataArray[i * step];
+                    webSpectrum.push(val / 255.0);
+                }
+                currentData = webSpectrum;
+                bars = showBars;
+            }
+
             const w = canvas.width / bars;
             const gradient = ctx.createLinearGradient(0, canvas.height, 0, 0);
             gradient.addColorStop(0, 'rgba(168, 85, 247, 0.0)');
@@ -151,8 +237,8 @@ export function PlayerBar() {
             ctx.fillStyle = gradient;
 
             for (let i = 0; i < bars; i++) {
-                const val = spectrumData[i];
-                const h = val * 5.0 * canvas.height;
+                const val = currentData[i];
+                const h = val * 0.8 * canvas.height; // Adjusted gain for visual balance
                 ctx.fillRect(i * w, canvas.height - h, w - 1, h);
             }
             animationId = requestAnimationFrame(draw);
@@ -164,7 +250,7 @@ export function PlayerBar() {
             cancelAnimationFrame(animationId);
             unlisten.then(f => f());
         }
-    }, [isPlaying]);
+    }, [isPlaying, playbackMode]);
 
     // Timer for Rust backend progress (only when using rust mode)
     useEffect(() => {
