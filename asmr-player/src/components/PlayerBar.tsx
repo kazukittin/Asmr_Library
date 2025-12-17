@@ -1,4 +1,4 @@
-import { Play, Pause, SkipBack, SkipForward, Repeat, Shuffle, Volume2 } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Shuffle, Volume2 } from 'lucide-react';
 import { usePlayerStore } from '../hooks/usePlayerStore';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -9,10 +9,12 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 type PlaybackMode = 'rust' | 'web' | null;
 
 export function PlayerBar() {
-    const { isPlaying, currentTrack, setIsPlaying, playNext, playPrev } = usePlayerStore();
+    const {
+        isPlaying, currentTrack, setIsPlaying, playNext, playPrev,
+        shuffle, repeatMode, toggleShuffle, cycleRepeatMode
+    } = usePlayerStore();
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const audioRef = useRef<HTMLAudioElement | null>(null);
-    // Add Web Audio Context refs
     const audioContextRef = useRef<AudioContext | null>(null);
     const analyserRef = useRef<AnalyserNode | null>(null);
     const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
@@ -324,7 +326,7 @@ export function PlayerBar() {
     const formatTime = (sec: number) => {
         const m = Math.floor(sec / 60);
         const s = Math.floor(sec % 60);
-        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+        return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')} `;
     };
 
     const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
@@ -352,7 +354,13 @@ export function PlayerBar() {
 
             <div className="flex flex-col items-center flex-1 min-w-0 px-4 max-w-3xl w-full z-10">
                 <div className="flex items-center gap-6 mb-2">
-                    <button className="text-gray-400 hover:text-white transition"><Shuffle className="w-4 h-4" /></button>
+                    <button
+                        className={`hover: text - white transition ${shuffle ? 'text-accent' : 'text-gray-400'} `}
+                        onClick={toggleShuffle}
+                        title={shuffle ? 'シャッフル: ON' : 'シャッフル: OFF'}
+                    >
+                        <Shuffle className="w-4 h-4" />
+                    </button>
                     <button className="text-gray-300 hover:text-white hover:scale-110 transition" onClick={playPrev}><SkipBack className="w-6 h-6" /></button>
                     <button
                         className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition shadow-[0_0_15px_rgba(255,255,255,0.3)]"
@@ -361,7 +369,13 @@ export function PlayerBar() {
                         {isPlaying ? <Pause className="w-5 h-5 ml-0.5" /> : <Play className="w-5 h-5 ml-1" />}
                     </button>
                     <button className="text-gray-300 hover:text-white hover:scale-110 transition" onClick={playNext}><SkipForward className="w-6 h-6" /></button>
-                    <button className="text-accent hover:text-accent-glow transition"><Repeat className="w-4 h-4" /></button>
+                    <button
+                        className={`hover: text - accent - glow transition ${repeatMode !== 'off' ? 'text-accent' : 'text-gray-400'} `}
+                        onClick={cycleRepeatMode}
+                        title={`リピート: ${repeatMode === 'off' ? 'OFF' : repeatMode === 'all' ? '全曲' : '1曲'} `}
+                    >
+                        {repeatMode === 'one' ? <Repeat1 className="w-4 h-4" /> : <Repeat className="w-4 h-4" />}
+                    </button>
                 </div>
 
                 <div className="w-full flex items-center gap-3 text-xs font-mono text-gray-400">
@@ -380,12 +394,12 @@ export function PlayerBar() {
                         />
 
                         <div className="w-full h-1 bg-gray-700 rounded-lg overflow-hidden relative">
-                            <div className="absolute top-0 left-0 h-full bg-accent" style={{ width: `${progressPercent}%` }}></div>
+                            <div className="absolute top-0 left-0 h-full bg-accent" style={{ width: `${progressPercent}% ` }}></div>
                         </div>
 
                         <div
                             className="absolute h-3 w-3 bg-white rounded-full shadow pointer-events-none z-10 transition-transform group-hover:scale-125"
-                            style={{ left: `${progressPercent}%`, transform: 'translateX(-50%)' }}
+                            style={{ left: `${progressPercent}% `, transform: 'translateX(-50%)' }}
                         ></div>
                     </div>
 

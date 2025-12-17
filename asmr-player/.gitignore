@@ -38,3 +38,21 @@ Desktop.ini
 *.njsproj
 *.sln
 *.sw?
+
+# Logs
+*.log
+
+# Build artifacts
+*.exe
+*.msi
+*.deb
+*.AppImage
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Agent artifacts (local brain)
+.agent/
+

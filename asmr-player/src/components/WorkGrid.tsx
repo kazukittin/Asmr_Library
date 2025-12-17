@@ -1,14 +1,59 @@
-import { Play, Edit2 } from 'lucide-react';
+import { Play, Edit2, Trash2, Heart } from 'lucide-react';
 import { useLibrary, Work } from '../hooks/useLibrary';
 import { usePlayerStore } from '../hooks/usePlayerStore';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { MetadataEditor } from './MetadataEditor';
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 
-export function WorkGrid() {
+interface WorkGridProps {
+    searchQuery?: string;
+}
+
+export function WorkGrid({ searchQuery = '' }: WorkGridProps) {
     const { works, loading, refetch } = useLibrary();
     const { setTrack, setQueue } = usePlayerStore();
     const [editingWork, setEditingWork] = useState<Work | null>(null);
+    const [favorites, setFavorites] = useState<Set<number>>(new Set());
+
+    // Load favorites on mount
+    useEffect(() => {
+        invoke<number[]>('get_favorites').then(ids => {
+            setFavorites(new Set(ids));
+        }).catch(console.error);
+    }, []);
+
+    const toggleFavorite = async (workId: number) => {
+        try {
+            const isFav = await invoke<boolean>('toggle_favorite', { workId });
+            setFavorites(prev => {
+                const next = new Set(prev);
+                if (isFav) {
+                    next.add(workId);
+                } else {
+                    next.delete(workId);
+                }
+                return next;
+            });
+        } catch (e) {
+            console.error("Failed to toggle favorite:", e);
+        }
+    };
+
+    // Filter works based on search query
+    const filteredWorks = useMemo(() => {
+        if (!searchQuery.trim()) return works;
+
+        const query = searchQuery.toLowerCase().trim();
+        return works.filter(work => {
+            return (
+                work.title.toLowerCase().includes(query) ||
+                (work.rj_code && work.rj_code.toLowerCase().includes(query)) ||
+                (work.voice_actors && work.voice_actors.toLowerCase().includes(query)) ||
+                (work.circles && work.circles.toLowerCase().includes(query)) ||
+                (work.tags && work.tags.toLowerCase().includes(query))
+            );
+        });
+    }, [works, searchQuery]);
 
     const handlePlay = async (work: Work) => {
         try {
@@ -16,7 +61,6 @@ export function WorkGrid() {
             const tracks = await invoke<any[]>('get_work_tracks', { workId: work.id });
 
             if (tracks && tracks.length > 0) {
-                // Map backend track to frontend track interface if needed, or ensure they match
                 const mappedTracks = tracks.map(t => ({
                     id: t.id,
                     title: t.title,
@@ -28,10 +72,6 @@ export function WorkGrid() {
 
                 setQueue(mappedTracks);
                 setTrack(mappedTracks[0]);
-
-                // Trigger playback immediately if store doesn't auto-trigger? 
-                // Store says: set({ currentTrack: track, isPlaying: true }) so it should trigger if PlayerBar reacts.
-
             } else {
                 console.warn("No tracks found for work.");
             }
@@ -41,17 +81,33 @@ export function WorkGrid() {
         }
     };
 
+    const handleDelete = async (work: Work) => {
+        if (!confirm(`「${work.title}」を削除しますか？\n\n⚠️ ファイルも削除されます。この操作は取り消せません。`)) {
+            return;
+        }
+
+        try {
+            await invoke('delete_work', { workId: work.id, deleteFiles: true });
+            refetch();
+        } catch (e) {
+            console.error("Failed to delete work:", e);
+            alert(`削除エラー: ${e}`);
+        }
+    };
+
     if (loading) return <div className="p-8 text-white">読み込み中...</div>;
 
     return (
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
             <div className="flex items-end justify-between mb-6">
-                <h2 className="text-2xl font-bold text-white tracking-tight">最近追加された作品</h2>
-                <span className="text-sm text-gray-500">{works.length} 作品</span>
+                <h2 className="text-2xl font-bold text-white tracking-tight">
+                    {searchQuery ? `検索結果: "${searchQuery}"` : '最近追加された作品'}
+                </h2>
+                <span className="text-sm text-gray-500">{filteredWorks.length} 作品</span>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6 pb-20">
-                {works.map((work) => (
+                {filteredWorks.map((work) => (
                     <div key={work.id} className="group relative flex flex-col cursor-pointer">
                         <div className="aspect-[2/3] w-full rounded-xl overflow-hidden relative bg-bg-panel shadow-lg shadow-black/50 group-hover:shadow-accent/20 transition-all duration-300 transform group-hover:-translate-y-1 ring-1 ring-white/5 group-hover:ring-accent/50">
                             <img
@@ -72,6 +128,20 @@ export function WorkGrid() {
                                 </button>
 
                                 <button
+                                    className={`w-10 h-10 rounded-full flex items-center justify-center transition-all backdrop-blur-sm ${favorites.has(work.id)
+                                            ? 'bg-pink-500/50 text-pink-300'
+                                            : 'bg-white/10 text-white hover:bg-pink-500/30'
+                                        }`}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        toggleFavorite(work.id);
+                                    }}
+                                    title={favorites.has(work.id) ? 'お気に入りから削除' : 'お気に入りに追加'}
+                                >
+                                    <Heart className={`w-4 h-4 ${favorites.has(work.id) ? 'fill-current' : ''}`} />
+                                </button>
+
+                                <button
                                     className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-all backdrop-blur-sm"
                                     onClick={(e) => {
                                         e.stopPropagation();
@@ -80,6 +150,17 @@ export function WorkGrid() {
                                     title="情報を編集"
                                 >
                                     <Edit2 className="w-4 h-4" />
+                                </button>
+
+                                <button
+                                    className="w-10 h-10 rounded-full bg-white/10 text-white flex items-center justify-center hover:bg-red-500/50 transition-all backdrop-blur-sm"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDelete(work);
+                                    }}
+                                    title="削除"
+                                >
+                                    <Trash2 className="w-4 h-4" />
                                 </button>
                             </div>
 
@@ -147,3 +228,4 @@ export function WorkGrid() {
         </div>
     );
 }
+

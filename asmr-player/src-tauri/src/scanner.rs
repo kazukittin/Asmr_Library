@@ -83,11 +83,13 @@ pub async fn scan_library(
 
             if is_work {
                 let path_str = path.to_string_lossy().to_string();
-                let mut cover_path = find_cover_image(path);
                 
-                // Fallback: Try to extract from audio file metadata
+                // Priority 1: Try to extract from audio file metadata (embedded cover)
+                let mut cover_path = extract_embedded_cover(path);
+                
+                // Priority 2: Fallback to image files in folder
                 if cover_path.is_none() {
-                    cover_path = extract_embedded_cover(path);
+                    cover_path = find_cover_image(path);
                 }
 
                 let existing_id: Option<i64> = sqlx::query("SELECT id FROM works WHERE dir_path = ?")

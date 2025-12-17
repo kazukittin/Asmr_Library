@@ -1,7 +1,84 @@
-# Tauri + React + Typescript
+# ASMR Player
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+DLsite/同人音声作品専用のデスクトッププレイヤー。Tauri + React + Rustで構築。
 
-## Recommended IDE Setup
+## 機能
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+### ライブラリ管理
+- **フォルダスキャン** - RJコード付きフォルダを自動検出
+- **メタデータ取得** - DLsiteから作品情報を自動取得（タイトル、サークル、声優、タグ）
+- **一括取得** - 未取得の作品を一括でスクレイピング
+
+### 再生機能
+- **マルチフォーマット対応** - MP3, FLAC, WAV, M4A, OGG
+- **シャッフル/リピート** - 全曲リピート、1曲リピート
+- **シーク** - 進む/戻る
+- **ビジュアライザー** - スペクトラム表示
+
+### プレイリスト
+- トラック単位でプレイリスト作成
+- ドラッグ&ドロップで追加
+
+### お気に入り
+- ワンクリックでお気に入り登録
+
+### 検索
+- タイトル、RJコード、声優、サークル、タグで検索
+
+---
+
+## キーボードショートカット
+
+| キー | 機能 |
+|------|------|
+| `Space` | 再生 / 一時停止 |
+| `→` | 10秒進む |
+| `←` | 10秒戻る |
+| `Ctrl+→` | 次のトラック |
+| `Ctrl+←` | 前のトラック |
+| `S` | シャッフル ON/OFF |
+| `R` | リピートモード切替 |
+| `M` | ミュート |
+
+---
+
+## 開発
+
+### 必要環境
+- Node.js 18+
+- Rust 1.70+
+- Tauri CLI
+
+### セットアップ
+```bash
+npm install
+npm run tauri dev
+```
+
+### ビルド
+```bash
+npm run tauri build
+```
+
+---
+
+## 使い方
+
+### 1. ライブラリに追加
+1. サイドバーの「ライブラリ更新」をクリック
+2. ASMRフォルダを選択
+3. RJコード付きフォルダが自動検出される
+
+### 2. メタデータ取得
+- **個別取得**: 作品カードの編集ボタン → 「DLsiteから取得」
+- **一括取得**: サイドバーの「一括取得」
+
+### 3. 再生
+- 作品カードの再生ボタンをクリック
+- プレイヤーバーで操作
+
+---
+
+## ライセンス
+
+MIT
