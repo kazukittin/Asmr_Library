@@ -769,14 +769,17 @@ async fn batch_scrape_metadata(
     pool: tauri::State<'_, sqlx::SqlitePool>,
     app: AppHandle
 ) -> Result<u32, String> {
-    // Get all works with RJ codes that don't have metadata
-    let works: Vec<(i64, String)> = sqlx::query_as(
+    use regex::Regex;
+    
+    let rj_regex = Regex::new(r"(?i)(RJ|BJ)\d{6,8}").unwrap();
+    
+    // Get all works that don't have metadata (no circles associated)
+    // Include works without RJ code - we'll try to extract from dir_path
+    let works: Vec<(i64, Option<String>, String)> = sqlx::query_as(
         r#"
-        SELECT w.id, w.rj_code 
+        SELECT w.id, w.rj_code, w.dir_path
         FROM works w
-        WHERE w.rj_code IS NOT NULL 
-        AND w.rj_code != ''
-        AND NOT EXISTS (SELECT 1 FROM work_circles wc WHERE wc.work_id = w.id)
+        WHERE NOT EXISTS (SELECT 1 FROM work_circles wc WHERE wc.work_id = w.id)
         "#
     )
     .fetch_all(pool.inner())
@@ -786,21 +789,42 @@ async fn batch_scrape_metadata(
     let total = works.len() as u32;
     let mut success_count = 0u32;
     
-    for (i, (work_id, rj_code)) in works.iter().enumerate() {
+    for (i, (work_id, rj_code_opt, dir_path)) in works.iter().enumerate() {
+        // Priority 1: Use existing RJ code from DB
+        // Priority 2: Extract RJ code from folder path
+        let rj_code = match rj_code_opt {
+            Some(code) if !code.is_empty() => Some(code.clone()),
+            _ => {
+                // Try to extract RJ code from dir_path
+                rj_regex.captures(dir_path)
+                    .and_then(|caps| caps.get(0))
+                    .map(|m| m.as_str().to_uppercase())
+            }
+        };
+        
+        let rj_code = match rj_code {
+            Some(code) => code,
+            None => {
+                // No RJ code found, skip this work
+                continue;
+            }
+        };
+        
         // Emit progress event
         app.emit("batch-scrape-progress", serde_json::json!({
             "current": i + 1,
             "total": total,
             "work_id": work_id,
-            "rj_code": rj_code
+            "rj_code": &rj_code
         })).ok();
         
         // Use existing scraper module
-        match scraper::fetch_dlsite_metadata(rj_code).await {
+        match scraper::fetch_dlsite_metadata(&rj_code).await {
             Ok(metadata) => {
-                // Update title
-                sqlx::query("UPDATE works SET title = ? WHERE id = ?")
+                // Update title and rj_code (in case it was extracted from folder)
+                sqlx::query("UPDATE works SET title = ?, rj_code = ? WHERE id = ?")
                     .bind(&metadata.title)
+                    .bind(&rj_code)
                     .bind(work_id)
                     .execute(pool.inner())
                     .await
@@ -868,6 +892,7 @@ async fn batch_scrape_metadata(
     
     Ok(success_count)
 }
+
 
 // ============ Delete Work API ============
 

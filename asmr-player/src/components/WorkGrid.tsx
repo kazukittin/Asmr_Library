@@ -1,7 +1,9 @@
-import { Play, Edit2, Trash2, Heart } from 'lucide-react';
+import { Play, Edit2, Trash2, Heart, Download, FolderPlus } from 'lucide-react';
+import { open } from '@tauri-apps/plugin-dialog';
 import { useLibrary, Work } from '../hooks/useLibrary';
 import { usePlayerStore } from '../hooks/usePlayerStore';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
+import { listen } from '@tauri-apps/api/event';
 import { MetadataEditor } from './MetadataEditor';
 import { useState, useMemo, useEffect } from 'react';
 
@@ -14,6 +16,9 @@ export function WorkGrid({ searchQuery = '' }: WorkGridProps) {
     const { setTrack, setQueue } = usePlayerStore();
     const [editingWork, setEditingWork] = useState<Work | null>(null);
     const [favorites, setFavorites] = useState<Set<number>>(new Set());
+    const [batchScraping, setBatchScraping] = useState(false);
+    const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
+    const [scanning, setScanning] = useState(false);
 
     // Load favorites on mount
     useEffect(() => {
@@ -95,6 +100,50 @@ export function WorkGrid({ searchQuery = '' }: WorkGridProps) {
         }
     };
 
+    const handleBatchScrape = async () => {
+        if (batchScraping) return;
+
+        setBatchScraping(true);
+        setBatchProgress(null);
+
+        const unlisten = await listen<{ current: number; total: number }>('batch-scrape-progress', (event) => {
+            setBatchProgress(event.payload);
+        });
+
+        try {
+            const count = await invoke<number>('batch_scrape_metadata');
+            alert(`${count} 件の作品のメタデータを取得しました。`);
+            refetch();
+        } catch (e) {
+            console.error("Batch scrape failed:", e);
+            alert('一括取得に失敗しました。');
+        } finally {
+            setBatchScraping(false);
+            setBatchProgress(null);
+            unlisten();
+        }
+    };
+
+    const handleRescan = async () => {
+        try {
+            const selected = await open({
+                directory: true,
+                multiple: false,
+                title: "ASMRライブラリフォルダを選択"
+            });
+
+            if (selected) {
+                setScanning(true);
+                await invoke('scan_library', { rootPath: selected });
+                refetch();
+                setScanning(false);
+            }
+        } catch (err) {
+            console.error(err);
+            setScanning(false);
+        }
+    };
+
     if (loading) return <div className="p-8 text-white">読み込み中...</div>;
 
     return (
@@ -103,7 +152,29 @@ export function WorkGrid({ searchQuery = '' }: WorkGridProps) {
                 <h2 className="text-2xl font-bold text-white tracking-tight">
                     {searchQuery ? `検索結果: "${searchQuery}"` : '最近追加された作品'}
                 </h2>
-                <span className="text-sm text-gray-500">{filteredWorks.length} 作品</span>
+                <div className="flex items-center gap-3">
+                    <button
+                        onClick={handleRescan}
+                        disabled={scanning}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-white text-sm rounded-lg transition-all border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="フォルダを選択してライブラリを更新"
+                    >
+                        <FolderPlus className="w-4 h-4" />
+                        {scanning ? 'スキャン中...' : 'フォルダ追加'}
+                    </button>
+                    <button
+                        onClick={handleBatchScrape}
+                        disabled={batchScraping}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-gradient-to-r from-pink-500/20 to-purple-500/20 hover:from-pink-500/30 hover:to-purple-500/30 text-white text-sm rounded-lg transition-all border border-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="RJコードを元にDLsiteからメタデータを一括取得"
+                    >
+                        <Download className="w-4 h-4" />
+                        {batchScraping
+                            ? `取得中 (${batchProgress?.current || 0}/${batchProgress?.total || '?'})`
+                            : 'メタデータ一括取得'}
+                    </button>
+                    <span className="text-sm text-gray-500">{filteredWorks.length} 作品</span>
+                </div>
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-6 pb-20">
@@ -129,8 +200,8 @@ export function WorkGrid({ searchQuery = '' }: WorkGridProps) {
 
                                 <button
                                     className={`w-10 h-10 rounded-full flex items-center justify-center transition-all backdrop-blur-sm ${favorites.has(work.id)
-                                            ? 'bg-pink-500/50 text-pink-300'
-                                            : 'bg-white/10 text-white hover:bg-pink-500/30'
+                                        ? 'bg-pink-500/50 text-pink-300'
+                                        : 'bg-white/10 text-white hover:bg-pink-500/30'
                                         }`}
                                     onClick={(e) => {
                                         e.stopPropagation();
