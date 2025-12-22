@@ -84,9 +84,7 @@ export function Sidebar({ currentPage, onPageChange, onPlaylistSelect, selectedP
         try {
             const count = await invoke<number>('cleanup_orphaned_works');
             if (count > 0) {
-                alert(`${count} 件の存在しない作品を削除しました。`);
-                // Trigger a page refresh
-                window.location.reload();
+                alert(`${count} 件の存在しない作品を削除しました。ページを更新してください。`);
             } else {
                 alert('削除する作品はありませんでした。');
             }
@@ -146,9 +144,7 @@ export function Sidebar({ currentPage, onPageChange, onPlaylistSelect, selectedP
 
         try {
             const count = await invoke<number>('batch_scrape_metadata');
-            alert(`${count} 件の作品のメタデータを取得しました。`);
-            // Refresh page to show updated titles
-            window.location.reload();
+            alert(`${count} 件の作品のメタデータを取得しました。ページを更新してください。`);
         } catch (e) {
             console.error("Batch scrape failed:", e);
             alert('一括取得に失敗しました。');
