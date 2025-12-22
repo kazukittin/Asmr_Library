@@ -1,5 +1,6 @@
 import { Play, Edit2, Trash2, Heart, User, Building2, X } from 'lucide-react';
 import { useLibrary, Work } from '../hooks/useLibrary';
+import { usePlayerStore } from '../hooks/usePlayerStore';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { MetadataEditor } from './MetadataEditor';
 import { WorkDetailModal } from './WorkDetailModal';
@@ -29,6 +30,7 @@ export function WorkGrid({
     onClearFilters
 }: WorkGridProps) {
     const { works, loading, refetch } = useLibrary();
+    const { setTrack, setQueue } = usePlayerStore();
     const [editingWork, setEditingWork] = useState<Work | null>(null);
     const [selectedWork, setSelectedWork] = useState<Work | null>(null);
     const [favorites, setFavorites] = useState<Set<number>>(new Set());
@@ -123,6 +125,32 @@ export function WorkGrid({
         return result;
     }, [works, searchQuery, selectedTag, selectedCircle, selectedVoiceActor, sortMode]);
 
+    // Direct playback - plays first track immediately
+    const handlePlay = async (work: Work) => {
+        try {
+            const tracks = await invoke<any[]>('get_work_tracks', { workId: work.id });
+
+            if (tracks && tracks.length > 0) {
+                const mappedTracks = tracks.map(t => ({
+                    id: t.id,
+                    title: t.title,
+                    path: t.path,
+                    duration: t.duration || 0,
+                    work_title: work.title,
+                    cover_path: work.cover_path || undefined
+                }));
+
+                setQueue(mappedTracks);
+                setTrack(mappedTracks[0]);
+
+                // Add to history
+                await invoke('add_to_history', { workId: work.id, trackId: tracks[0].id }).catch(console.error);
+            }
+        } catch (e) {
+            console.error("Failed to play work:", e);
+        }
+    };
+
     const handleDelete = async (work: Work) => {
         if (!confirm(`「${work.title}」を削除しますか？\n\n⚠️ ファイルも削除されます。`)) {
             return;
@@ -185,7 +213,8 @@ export function WorkGrid({
                         key={work.id}
                         work={work}
                         isFavorite={favorites.has(work.id)}
-                        onPlay={() => setSelectedWork(work)}
+                        onPlay={() => handlePlay(work)}
+                        onOpenDetail={() => setSelectedWork(work)}
                         onEdit={() => setEditingWork(work)}
                         onDelete={() => handleDelete(work)}
                         onToggleFavorite={() => toggleFavorite(work.id)}
@@ -220,10 +249,11 @@ export function WorkGrid({
 }
 
 // Grid Card Component (ASMR.one Style)
-function GridCard({ work, isFavorite, onPlay, onEdit, onDelete, onToggleFavorite, onTagClick, onCircleClick, onVoiceActorClick }: {
+function GridCard({ work, isFavorite, onPlay, onOpenDetail, onEdit, onDelete, onToggleFavorite, onTagClick, onCircleClick, onVoiceActorClick }: {
     work: Work;
     isFavorite: boolean;
     onPlay: () => void;
+    onOpenDetail: () => void;
     onEdit: () => void;
     onDelete: () => void;
     onToggleFavorite: () => void;
@@ -233,7 +263,7 @@ function GridCard({ work, isFavorite, onPlay, onEdit, onDelete, onToggleFavorite
 }) {
     return (
         <div className="group bg-bg-panel rounded-lg overflow-hidden card-shadow hover:card-shadow-hover transition-all duration-300 cursor-pointer">
-            {/* Cover Image */}
+            {/* Cover Image - Click to play directly */}
             <div className="relative aspect-square overflow-hidden" onClick={onPlay}>
                 <img
                     src={work.cover_path ? convertFileSrc(work.cover_path) : `https://placehold.co/400x400/e0e0e0/999?text=${work.rj_code || 'ASMR'}`}
@@ -241,11 +271,14 @@ function GridCard({ work, isFavorite, onPlay, onEdit, onDelete, onToggleFavorite
                     className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
                 />
 
-                {/* RJ Code Badge */}
+                {/* RJ Code Badge - Click for details */}
                 {work.rj_code && (
-                    <div className="absolute top-2 left-2 bg-black/70 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-sm">
+                    <button
+                        onClick={(e) => { e.stopPropagation(); onOpenDetail(); }}
+                        className="absolute top-2 left-2 bg-black/70 text-white text-[10px] font-bold px-2 py-0.5 rounded backdrop-blur-sm hover:bg-accent transition-colors"
+                    >
                         {work.rj_code}
-                    </div>
+                    </button>
                 )}
 
                 {/* Favorite Button */}
@@ -269,8 +302,11 @@ function GridCard({ work, isFavorite, onPlay, onEdit, onDelete, onToggleFavorite
 
             {/* Card Content */}
             <div className="p-3">
-                {/* Title */}
-                <h3 className="font-bold text-text-primary line-clamp-2 leading-tight text-sm">
+                {/* Title - Click to open details */}
+                <h3
+                    onClick={onOpenDetail}
+                    className="font-bold text-text-primary line-clamp-2 leading-tight text-sm hover:text-accent transition-colors cursor-pointer"
+                >
                     {work.title}
                 </h3>
 
