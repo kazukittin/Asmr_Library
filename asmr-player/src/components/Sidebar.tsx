@@ -1,4 +1,4 @@
-import { Library, Mic, Tag, FolderPlus, ListMusic, Plus, Trash2, History, Download, ChevronRight, Home } from 'lucide-react';
+import { Library, Mic, Tag, FolderPlus, ListMusic, Plus, Trash2, History, Download, ChevronRight, Home, RefreshCw } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { listen } from '@tauri-apps/api/event';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -33,6 +33,7 @@ export function Sidebar({ currentPage, onPageChange, onPlaylistSelect, selectedP
     const [batchScraping, setBatchScraping] = useState(false);
     const [batchProgress, setBatchProgress] = useState<{ current: number; total: number } | null>(null);
     const [expanded, setExpanded] = useState(false);
+    const [cleaning, setCleaning] = useState(false);
 
     useEffect(() => {
         const unlisten = listen('scan-progress', (event) => {
@@ -73,6 +74,27 @@ export function Sidebar({ currentPage, onPageChange, onPlaylistSelect, selectedP
         } catch (err) {
             console.error(err);
             setScanning(false);
+        }
+    };
+
+    const handleCleanup = async () => {
+        if (cleaning) return;
+
+        setCleaning(true);
+        try {
+            const count = await invoke<number>('cleanup_orphaned_works');
+            if (count > 0) {
+                alert(`${count} 件の存在しない作品を削除しました。`);
+                // Trigger a page refresh
+                window.location.reload();
+            } else {
+                alert('削除する作品はありませんでした。');
+            }
+        } catch (e) {
+            console.error("Cleanup failed:", e);
+            alert('クリーンアップに失敗しました。');
+        } finally {
+            setCleaning(false);
         }
     };
 
@@ -125,6 +147,8 @@ export function Sidebar({ currentPage, onPageChange, onPlaylistSelect, selectedP
         try {
             const count = await invoke<number>('batch_scrape_metadata');
             alert(`${count} 件の作品のメタデータを取得しました。`);
+            // Refresh page to show updated titles
+            window.location.reload();
         } catch (e) {
             console.error("Batch scrape failed:", e);
             alert('一括取得に失敗しました。');
@@ -144,6 +168,7 @@ export function Sidebar({ currentPage, onPageChange, onPlaylistSelect, selectedP
     const actionItems = [
         { icon: FolderPlus, label: scanning ? 'スキャン中...' : 'フォルダ追加', onClick: handleScan, disabled: scanning },
         { icon: Download, label: batchScraping ? `${batchProgress?.current || 0}/${batchProgress?.total || '?'}` : 'メタデータ取得', onClick: handleBatchScrape, disabled: batchScraping },
+        { icon: RefreshCw, label: cleaning ? 'クリーンアップ中...' : '不要データ削除', onClick: handleCleanup, disabled: cleaning },
         { icon: History, label: '再生履歴', onClick: loadHistory, disabled: false },
     ];
 

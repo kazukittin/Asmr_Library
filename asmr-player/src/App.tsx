@@ -36,6 +36,9 @@ function App() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState<PageType>('library');
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
+  const [selectedCircle, setSelectedCircle] = useState<string | null>(null);
+  const [selectedVoiceActor, setSelectedVoiceActor] = useState<string | null>(null);
 
   // Enable keyboard shortcuts
   useKeyboardShortcuts();
@@ -61,11 +64,36 @@ function App() {
     if (page !== 'playlist') {
       setSelectedPlaylist(null);
     }
+    clearAllFilters();
   };
 
   const handlePlaylistSelect = (playlist: Playlist) => {
     setSelectedPlaylist(playlist);
     setCurrentPage('playlist');
+  };
+
+  const handleTagClick = (tag: string) => {
+    clearAllFilters();
+    setSelectedTag(tag);
+    setCurrentPage('library');
+  };
+
+  const handleCircleClick = (circle: string) => {
+    clearAllFilters();
+    setSelectedCircle(circle);
+    setCurrentPage('library');
+  };
+
+  const handleVoiceActorClick = (va: string) => {
+    clearAllFilters();
+    setSelectedVoiceActor(va);
+    setCurrentPage('library');
+  };
+
+  const clearAllFilters = () => {
+    setSelectedTag(null);
+    setSelectedCircle(null);
+    setSelectedVoiceActor(null);
   };
 
   const renderMainContent = () => {
@@ -78,10 +106,10 @@ function App() {
         if (selectedPlaylist) {
           return <PlaylistPage playlist={selectedPlaylist} />;
         }
-        return <WorkGrid searchQuery={searchQuery} />;
+        return <WorkGrid searchQuery={searchQuery} selectedTag={selectedTag} selectedCircle={selectedCircle} selectedVoiceActor={selectedVoiceActor} onTagClick={handleTagClick} onCircleClick={handleCircleClick} onVoiceActorClick={handleVoiceActorClick} onClearFilters={clearAllFilters} />;
       case 'library':
       default:
-        return <WorkGrid searchQuery={searchQuery} />;
+        return <WorkGrid searchQuery={searchQuery} selectedTag={selectedTag} selectedCircle={selectedCircle} selectedVoiceActor={selectedVoiceActor} onTagClick={handleTagClick} onCircleClick={handleCircleClick} onVoiceActorClick={handleVoiceActorClick} onClearFilters={clearAllFilters} />;
     }
   };
 

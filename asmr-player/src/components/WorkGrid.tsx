@@ -1,4 +1,4 @@
-import { Play, Edit2, Trash2, Heart, User, Building2, LayoutGrid, List, Grid3X3 } from 'lucide-react';
+import { Play, Edit2, Trash2, Heart, User, Building2, X } from 'lucide-react';
 import { useLibrary, Work } from '../hooks/useLibrary';
 import { usePlayerStore } from '../hooks/usePlayerStore';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
@@ -7,18 +7,37 @@ import { useState, useMemo, useEffect } from 'react';
 
 interface WorkGridProps {
     searchQuery?: string;
+    selectedTag?: string | null;
+    selectedCircle?: string | null;
+    selectedVoiceActor?: string | null;
+    onTagClick?: (tag: string) => void;
+    onCircleClick?: (circle: string) => void;
+    onVoiceActorClick?: (va: string) => void;
+    onClearFilters?: () => void;
 }
 
-type ViewMode = 'large' | 'small' | 'list';
 type SortMode = 'newest' | 'title' | 'rj';
 
-export function WorkGrid({ searchQuery = '' }: WorkGridProps) {
+export function WorkGrid({
+    searchQuery = '',
+    selectedTag = null,
+    selectedCircle = null,
+    selectedVoiceActor = null,
+    onTagClick,
+    onCircleClick,
+    onVoiceActorClick,
+    onClearFilters
+}: WorkGridProps) {
     const { works, loading, refetch } = useLibrary();
     const { setTrack, setQueue } = usePlayerStore();
     const [editingWork, setEditingWork] = useState<Work | null>(null);
     const [favorites, setFavorites] = useState<Set<number>>(new Set());
-    const [viewMode, setViewMode] = useState<ViewMode>('large');
     const [sortMode, setSortMode] = useState<SortMode>('newest');
+
+    // Active filter label
+    const activeFilter = selectedTag ? `タグ: ${selectedTag}` :
+        selectedCircle ? `サークル: ${selectedCircle}` :
+            selectedVoiceActor ? `声優: ${selectedVoiceActor}` : null;
 
     // Load favorites on mount
     useEffect(() => {
@@ -48,6 +67,7 @@ export function WorkGrid({ searchQuery = '' }: WorkGridProps) {
     const filteredWorks = useMemo(() => {
         let result = works;
 
+        // Filter by search query
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase().trim();
             result = result.filter(work => {
@@ -58,6 +78,32 @@ export function WorkGrid({ searchQuery = '' }: WorkGridProps) {
                     (work.circles && work.circles.toLowerCase().includes(query)) ||
                     (work.tags && work.tags.toLowerCase().includes(query))
                 );
+            });
+        }
+
+        // Filter by selected tag
+        if (selectedTag) {
+            result = result.filter(work => {
+                if (!work.tags) return false;
+                const workTags = work.tags.split(',').map(t => t.trim().toLowerCase());
+                return workTags.includes(selectedTag.toLowerCase());
+            });
+        }
+
+        // Filter by selected circle
+        if (selectedCircle) {
+            result = result.filter(work => {
+                if (!work.circles) return false;
+                return work.circles.toLowerCase().includes(selectedCircle.toLowerCase());
+            });
+        }
+
+        // Filter by selected voice actor
+        if (selectedVoiceActor) {
+            result = result.filter(work => {
+                if (!work.voice_actors) return false;
+                const workVAs = work.voice_actors.split(',').map(v => v.trim().toLowerCase());
+                return workVAs.includes(selectedVoiceActor.toLowerCase());
             });
         }
 
@@ -75,7 +121,7 @@ export function WorkGrid({ searchQuery = '' }: WorkGridProps) {
         }
 
         return result;
-    }, [works, searchQuery, sortMode]);
+    }, [works, searchQuery, selectedTag, selectedCircle, selectedVoiceActor, sortMode]);
 
     const handlePlay = async (work: Work) => {
         try {
@@ -120,22 +166,25 @@ export function WorkGrid({ searchQuery = '' }: WorkGridProps) {
         </div>
     );
 
-    const getGridCols = () => {
-        switch (viewMode) {
-            case 'small': return 'grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8';
-            case 'list': return 'grid-cols-1';
-            default: return 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5';
-        }
-    };
-
     return (
         <div className="flex-1 overflow-y-auto p-6">
             {/* Header with title and controls */}
             <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold text-text-primary">
-                    {searchQuery ? `検索結果: "${searchQuery}"` : '全作品'}
-                    <span className="text-text-muted font-normal ml-2">({filteredWorks.length})</span>
-                </h2>
+                <div className="flex items-center gap-3">
+                    <h2 className="text-xl font-bold text-text-primary">
+                        {searchQuery ? `検索結果: "${searchQuery}"` : activeFilter ? activeFilter : '全作品'}
+                        <span className="text-text-muted font-normal ml-2">({filteredWorks.length})</span>
+                    </h2>
+                    {activeFilter && onClearFilters && (
+                        <button
+                            onClick={onClearFilters}
+                            className="flex items-center gap-1 px-2 py-1 text-xs bg-accent text-white rounded-full hover:bg-accent/80 transition-colors"
+                        >
+                            クリア
+                            <X className="w-3 h-3" />
+                        </button>
+                    )}
+                </div>
 
                 {/* Utility Bar */}
                 <div className="flex items-center gap-4">
@@ -149,59 +198,24 @@ export function WorkGrid({ searchQuery = '' }: WorkGridProps) {
                         <option value="title">タイトル順</option>
                         <option value="rj">RJ番号順</option>
                     </select>
-
-                    {/* View Mode Toggle */}
-                    <div className="flex bg-bg-panel border border-card-border rounded-lg overflow-hidden">
-                        <button
-                            onClick={() => setViewMode('large')}
-                            className={`p-2 ${viewMode === 'large' ? 'bg-accent text-white' : 'text-text-secondary hover:bg-bg-hover'}`}
-                            title="大きいグリッド"
-                        >
-                            <LayoutGrid className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={() => setViewMode('small')}
-                            className={`p-2 ${viewMode === 'small' ? 'bg-accent text-white' : 'text-text-secondary hover:bg-bg-hover'}`}
-                            title="小さいグリッド"
-                        >
-                            <Grid3X3 className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={() => setViewMode('list')}
-                            className={`p-2 ${viewMode === 'list' ? 'bg-accent text-white' : 'text-text-secondary hover:bg-bg-hover'}`}
-                            title="リスト表示"
-                        >
-                            <List className="w-4 h-4" />
-                        </button>
-                    </div>
                 </div>
             </div>
 
-            {/* Works Grid */}
-            <div className={`grid ${getGridCols()} gap-4 pb-20`}>
+            {/* Works Grid - Large only */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 pb-20">
                 {filteredWorks.map((work) => (
-                    viewMode === 'list' ? (
-                        <ListCard
-                            key={work.id}
-                            work={work}
-                            isFavorite={favorites.has(work.id)}
-                            onPlay={() => handlePlay(work)}
-                            onEdit={() => setEditingWork(work)}
-                            onDelete={() => handleDelete(work)}
-                            onToggleFavorite={() => toggleFavorite(work.id)}
-                        />
-                    ) : (
-                        <GridCard
-                            key={work.id}
-                            work={work}
-                            isFavorite={favorites.has(work.id)}
-                            isSmall={viewMode === 'small'}
-                            onPlay={() => handlePlay(work)}
-                            onEdit={() => setEditingWork(work)}
-                            onDelete={() => handleDelete(work)}
-                            onToggleFavorite={() => toggleFavorite(work.id)}
-                        />
-                    )
+                    <GridCard
+                        key={work.id}
+                        work={work}
+                        isFavorite={favorites.has(work.id)}
+                        onPlay={() => handlePlay(work)}
+                        onEdit={() => setEditingWork(work)}
+                        onDelete={() => handleDelete(work)}
+                        onToggleFavorite={() => toggleFavorite(work.id)}
+                        onTagClick={onTagClick}
+                        onCircleClick={onCircleClick}
+                        onVoiceActorClick={onVoiceActorClick}
+                    />
                 ))}
             </div>
 
@@ -220,14 +234,16 @@ export function WorkGrid({ searchQuery = '' }: WorkGridProps) {
 }
 
 // Grid Card Component (ASMR.one Style)
-function GridCard({ work, isFavorite, isSmall, onPlay, onEdit, onDelete, onToggleFavorite }: {
+function GridCard({ work, isFavorite, onPlay, onEdit, onDelete, onToggleFavorite, onTagClick, onCircleClick, onVoiceActorClick }: {
     work: Work;
     isFavorite: boolean;
-    isSmall: boolean;
     onPlay: () => void;
     onEdit: () => void;
     onDelete: () => void;
     onToggleFavorite: () => void;
+    onTagClick?: (tag: string) => void;
+    onCircleClick?: (circle: string) => void;
+    onVoiceActorClick?: (va: string) => void;
 }) {
     return (
         <div className="group bg-bg-panel rounded-lg overflow-hidden card-shadow hover:card-shadow-hover transition-all duration-300 cursor-pointer">
@@ -268,40 +284,55 @@ function GridCard({ work, isFavorite, isSmall, onPlay, onEdit, onDelete, onToggl
             {/* Card Content */}
             <div className="p-3">
                 {/* Title */}
-                <h3 className={`font-bold text-text-primary line-clamp-2 leading-tight ${isSmall ? 'text-xs' : 'text-sm'}`}>
+                <h3 className="font-bold text-text-primary line-clamp-2 leading-tight text-sm">
                     {work.title}
                 </h3>
 
-                {!isSmall && (
-                    <>
-                        {/* Tags */}
-                        {work.tags && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                                {work.tags.split(',').slice(0, 3).map((tag, i) => (
-                                    <span key={i} className="text-[10px] text-tag-text bg-tag-bg px-1.5 py-0.5 rounded">
-                                        {tag.trim()}
-                                    </span>
-                                ))}
-                            </div>
-                        )}
-
-                        {/* Meta Row */}
-                        <div className="flex items-center gap-3 mt-2 text-[11px] text-text-muted">
-                            {work.circles && (
-                                <span className="flex items-center gap-1">
-                                    <Building2 className="w-3 h-3 text-circle-badge" />
-                                    <span className="truncate max-w-[80px]">{work.circles}</span>
-                                </span>
-                            )}
-                            {work.voice_actors && (
-                                <span className="flex items-center gap-1">
-                                    <User className="w-3 h-3 text-va-badge" />
-                                    <span className="truncate max-w-[80px]">{work.voice_actors.split(',')[0]}</span>
-                                </span>
-                            )}
-                        </div>
-                    </>
+                {/* Tags - Clickable */}
+                {work.tags && (
+                    <div className="flex flex-wrap gap-1 mt-2">
+                        {work.tags.split(',').slice(0, 3).map((tag, i) => (
+                            <button
+                                key={i}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    onTagClick?.(tag.trim());
+                                }}
+                                className="text-[10px] text-tag-text bg-tag-bg px-1.5 py-0.5 rounded hover:bg-accent hover:text-white transition-colors"
+                            >
+                                {tag.trim()}
+                            </button>
+                        ))}
+                    </div>
                 )}
+
+                {/* Meta Row - Clickable */}
+                <div className="flex items-center gap-3 mt-2 text-[11px] text-text-muted">
+                    {work.circles && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onCircleClick?.(work.circles!);
+                            }}
+                            className="flex items-center gap-1 hover:text-accent transition-colors"
+                        >
+                            <Building2 className="w-3 h-3 text-circle-badge" />
+                            <span className="truncate max-w-[80px]">{work.circles}</span>
+                        </button>
+                    )}
+                    {work.voice_actors && (
+                        <button
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                onVoiceActorClick?.(work.voice_actors!.split(',')[0].trim());
+                            }}
+                            className="flex items-center gap-1 hover:text-accent transition-colors"
+                        >
+                            <User className="w-3 h-3 text-va-badge" />
+                            <span className="truncate max-w-[80px]">{work.voice_actors.split(',')[0]}</span>
+                        </button>
+                    )}
+                </div>
 
                 {/* Action Buttons */}
                 <div className="flex items-center gap-1 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -320,79 +351,6 @@ function GridCard({ work, isFavorite, isSmall, onPlay, onEdit, onDelete, onToggl
                         <Trash2 className="w-3.5 h-3.5" />
                     </button>
                 </div>
-            </div>
-        </div>
-    );
-}
-
-// List Card Component
-function ListCard({ work, isFavorite, onPlay, onEdit, onDelete, onToggleFavorite }: {
-    work: Work;
-    isFavorite: boolean;
-    onPlay: () => void;
-    onEdit: () => void;
-    onDelete: () => void;
-    onToggleFavorite: () => void;
-}) {
-    return (
-        <div
-            className="group flex items-center gap-4 p-3 bg-bg-panel rounded-lg card-shadow hover:card-shadow-hover transition-all cursor-pointer"
-            onClick={onPlay}
-        >
-            {/* Cover */}
-            <div className="w-16 h-16 rounded-lg overflow-hidden shrink-0 relative">
-                <img
-                    src={work.cover_path ? convertFileSrc(work.cover_path) : `https://placehold.co/100x100/e0e0e0/999?text=?`}
-                    alt=""
-                    className="w-full h-full object-cover"
-                />
-                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <Play className="w-6 h-6 text-white" />
-                </div>
-            </div>
-
-            {/* Content */}
-            <div className="flex-1 min-w-0">
-                <h3 className="font-bold text-text-primary truncate">{work.title}</h3>
-                <div className="flex items-center gap-3 text-xs text-text-muted mt-1">
-                    {work.rj_code && (
-                        <span className="font-mono bg-tag-bg px-1.5 py-0.5 rounded">{work.rj_code}</span>
-                    )}
-                    {work.circles && (
-                        <span className="flex items-center gap-1">
-                            <Building2 className="w-3 h-3 text-circle-badge" />
-                            {work.circles}
-                        </span>
-                    )}
-                    {work.voice_actors && (
-                        <span className="flex items-center gap-1">
-                            <User className="w-3 h-3 text-va-badge" />
-                            {work.voice_actors.split(',')[0]}
-                        </span>
-                    )}
-                </div>
-            </div>
-
-            {/* Actions */}
-            <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                    onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
-                    className={`p-2 rounded-full ${isFavorite ? 'text-pink-500' : 'text-text-muted hover:text-pink-500'}`}
-                >
-                    <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
-                </button>
-                <button
-                    onClick={(e) => { e.stopPropagation(); onEdit(); }}
-                    className="p-2 text-text-muted hover:text-accent rounded-full"
-                >
-                    <Edit2 className="w-4 h-4" />
-                </button>
-                <button
-                    onClick={(e) => { e.stopPropagation(); onDelete(); }}
-                    className="p-2 text-text-muted hover:text-red-500 rounded-full"
-                >
-                    <Trash2 className="w-4 h-4" />
-                </button>
             </div>
         </div>
     );

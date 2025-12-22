@@ -37,10 +37,17 @@ async fn get_all_works(pool: tauri::State<'_, sqlx::SqlitePool>) -> Result<Vec<W
         ORDER BY w.created_at DESC
     "#;
 
-    let works = sqlx::query_as::<_, Work>(sql)
+    let all_works = sqlx::query_as::<_, Work>(sql)
         .fetch_all(pool.inner())
         .await
         .map_err(|e| e.to_string())?;
+    
+    // Filter out works whose directories no longer exist
+    let works: Vec<Work> = all_works
+        .into_iter()
+        .filter(|w| std::path::Path::new(&w.dir_path).exists())
+        .collect();
+    
     Ok(works)
 }
 
@@ -1041,6 +1048,7 @@ pub fn run() {
             batch_scrape_metadata,
             delete_work,
             scanner::scan_library,
+            scanner::cleanup_orphaned_works,
             audio::play_track,
             audio::pause_track,
             audio::resume_track,

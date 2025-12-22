@@ -147,6 +147,78 @@ pub async fn scan_library(
     Ok(count)
 }
 
+/// Cleanup works whose folders no longer exist on disk
+#[tauri::command]
+pub async fn cleanup_orphaned_works(
+    pool: tauri::State<'_, SqlitePool>,
+) -> Result<u32, String> {
+    let pool = pool.inner();
+    
+    // Get all works with their directory paths
+    let works: Vec<(i64, String)> = sqlx::query_as("SELECT id, dir_path FROM works")
+        .fetch_all(pool)
+        .await
+        .map_err(|e| e.to_string())?;
+    
+    let mut removed_count = 0u32;
+    
+    for (work_id, dir_path) in works {
+        let path = Path::new(&dir_path);
+        
+        // If the directory no longer exists, remove the work from DB
+        if !path.exists() {
+            // Delete related records first (foreign key constraints)
+            sqlx::query("DELETE FROM tracks WHERE work_id = ?")
+                .bind(work_id)
+                .execute(pool)
+                .await
+                .ok();
+            
+            sqlx::query("DELETE FROM work_voice_actors WHERE work_id = ?")
+                .bind(work_id)
+                .execute(pool)
+                .await
+                .ok();
+            
+            sqlx::query("DELETE FROM work_circles WHERE work_id = ?")
+                .bind(work_id)
+                .execute(pool)
+                .await
+                .ok();
+            
+            sqlx::query("DELETE FROM work_tags WHERE work_id = ?")
+                .bind(work_id)
+                .execute(pool)
+                .await
+                .ok();
+            
+            sqlx::query("DELETE FROM favorites WHERE work_id = ?")
+                .bind(work_id)
+                .execute(pool)
+                .await
+                .ok();
+            
+            sqlx::query("DELETE FROM playlist_tracks WHERE track_id IN (SELECT id FROM tracks WHERE work_id = ?)")
+                .bind(work_id)
+                .execute(pool)
+                .await
+                .ok();
+            
+            // Finally delete the work
+            sqlx::query("DELETE FROM works WHERE id = ?")
+                .bind(work_id)
+                .execute(pool)
+                .await
+                .ok();
+            
+            removed_count += 1;
+            eprintln!("Removed orphaned work: {} ({})", work_id, dir_path);
+        }
+    }
+    
+    Ok(removed_count)
+}
+
 fn contains_audio_files(path: &Path) -> bool {
     if let Ok(entries) = fs::read_dir(path) {
         for entry in entries.flatten() {
