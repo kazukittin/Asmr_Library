@@ -23,7 +23,7 @@ interface SidebarProps {
 }
 
 export function Sidebar({ currentPage, onPageChange, onPlaylistSelect, selectedPlaylistId }: SidebarProps) {
-    const [scanCount, setScanCount] = useState(0);
+    const [, setScanCount] = useState(0);
     const [scanning, setScanning] = useState(false);
     const [playlists, setPlaylists] = useState<Playlist[]>([]);
     const [isCreating, setIsCreating] = useState(false);

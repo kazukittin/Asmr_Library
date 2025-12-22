@@ -1,6 +1,5 @@
 import { Play, Edit2, Trash2, Heart, User, Building2, X } from 'lucide-react';
 import { useLibrary, Work } from '../hooks/useLibrary';
-import { usePlayerStore } from '../hooks/usePlayerStore';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { MetadataEditor } from './MetadataEditor';
 import { WorkDetailModal } from './WorkDetailModal';
@@ -30,7 +29,6 @@ export function WorkGrid({
     onClearFilters
 }: WorkGridProps) {
     const { works, loading, refetch } = useLibrary();
-    const { setTrack, setQueue } = usePlayerStore();
     const [editingWork, setEditingWork] = useState<Work | null>(null);
     const [selectedWork, setSelectedWork] = useState<Work | null>(null);
     const [favorites, setFavorites] = useState<Set<number>>(new Set());
@@ -124,29 +122,6 @@ export function WorkGrid({
 
         return result;
     }, [works, searchQuery, selectedTag, selectedCircle, selectedVoiceActor, sortMode]);
-
-    const handlePlay = async (work: Work) => {
-        try {
-            const tracks = await invoke<any[]>('get_work_tracks', { workId: work.id });
-
-            if (tracks && tracks.length > 0) {
-                const mappedTracks = tracks.map(t => ({
-                    id: t.id,
-                    title: t.title,
-                    path: t.path,
-                    duration: t.duration || 0,
-                    work_title: work.title,
-                    cover_path: work.cover_path || undefined
-                }));
-
-                setQueue(mappedTracks);
-                setTrack(mappedTracks[0]);
-            }
-        } catch (e) {
-            console.error("Failed to play work:", e);
-            alert(`Playback Error: ${e}`);
-        }
-    };
 
     const handleDelete = async (work: Work) => {
         if (!confirm(`「${work.title}」を削除しますか？\n\n⚠️ ファイルも削除されます。`)) {

@@ -194,7 +194,7 @@ export function WorkDetailModal({ work, isOpen, onClose }: WorkDetailModalProps)
                             ) : tracks.length === 0 ? (
                                 <div className="text-center py-8 text-gray-400">トラックがありません</div>
                             ) : (
-                                tracks.map((track, index) => {
+                                tracks.map((track) => {
                                     const isCurrentTrack = currentTrack?.id === track.id;
                                     return (
                                         <button
