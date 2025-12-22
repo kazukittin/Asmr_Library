@@ -1,4 +1,4 @@
-import { Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Shuffle, Volume2 } from 'lucide-react';
+import { Play, Pause, SkipBack, SkipForward, Repeat, Repeat1, Shuffle, Volume2, Moon } from 'lucide-react';
 import { usePlayerStore } from '../hooks/usePlayerStore';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -24,6 +24,10 @@ export function PlayerBar() {
     const [duration, setDuration] = useState(0);
     const [isSeeking, setIsSeeking] = useState(false);
     const [playbackMode, setPlaybackMode] = useState<PlaybackMode>(null);
+
+    // Sleep Timer State
+    const [sleepTimerSeconds, setSleepTimerSeconds] = useState<number | null>(null);
+    const [showSleepMenu, setShowSleepMenu] = useState(false);
 
     // Initialize Web Audio Context
     const initAudioContext = useCallback(() => {
@@ -329,6 +333,40 @@ export function PlayerBar() {
         return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')} `;
     };
 
+    // Sleep Timer Countdown Effect
+    useEffect(() => {
+        if (sleepTimerSeconds === null || sleepTimerSeconds <= 0) return;
+
+        const interval = setInterval(() => {
+            setSleepTimerSeconds(prev => {
+                if (prev === null || prev <= 1) {
+                    // Timer finished - stop playback
+                    stopAllPlayback();
+                    setIsPlaying(false);
+                    return null;
+                }
+                return prev - 1;
+            });
+        }, 1000);
+
+        return () => clearInterval(interval);
+    }, [sleepTimerSeconds, stopAllPlayback, setIsPlaying]);
+
+    const setSleepTimer = (minutes: number | null) => {
+        if (minutes === null) {
+            setSleepTimerSeconds(null);
+        } else {
+            setSleepTimerSeconds(minutes * 60);
+        }
+        setShowSleepMenu(false);
+    };
+
+    const formatSleepTime = (sec: number) => {
+        const m = Math.floor(sec / 60);
+        const s = sec % 60;
+        return `${m}:${s.toString().padStart(2, '0')}`;
+    };
+
     const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
     return (
@@ -408,6 +446,51 @@ export function PlayerBar() {
             </div>
 
             <div className="flex items-center justify-end w-1/4 min-w-[200px] gap-4 z-10">
+                {/* Sleep Timer */}
+                <div className="relative">
+                    <button
+                        onClick={() => setShowSleepMenu(!showSleepMenu)}
+                        className={`p-2 rounded-full transition-colors ${sleepTimerSeconds ? 'bg-accent text-white' : 'text-text-muted hover:text-accent hover:bg-gray-100'}`}
+                        title="スリープタイマー"
+                    >
+                        <Moon className="w-5 h-5" />
+                        {sleepTimerSeconds && (
+                            <span className="absolute -top-1 -right-1 text-[10px] bg-accent text-white px-1 rounded-full">
+                                {formatSleepTime(sleepTimerSeconds)}
+                            </span>
+                        )}
+                    </button>
+
+                    {showSleepMenu && (
+                        <div className="absolute bottom-full right-0 mb-2 bg-white rounded-lg shadow-xl border border-gray-200 py-2 min-w-[140px] z-50">
+                            <div className="px-3 py-1 text-xs text-gray-400 font-medium">スリープタイマー</div>
+                            {[
+                                { label: '15分', value: 15 },
+                                { label: '30分', value: 30 },
+                                { label: '45分', value: 45 },
+                                { label: '60分', value: 60 },
+                                { label: '90分', value: 90 },
+                            ].map(opt => (
+                                <button
+                                    key={opt.value}
+                                    onClick={() => setSleepTimer(opt.value)}
+                                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 transition-colors"
+                                >
+                                    {opt.label}
+                                </button>
+                            ))}
+                            {sleepTimerSeconds && (
+                                <button
+                                    onClick={() => setSleepTimer(null)}
+                                    className="w-full px-3 py-2 text-left text-sm text-red-500 hover:bg-red-50 transition-colors border-t border-gray-100"
+                                >
+                                    タイマー解除
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
+
                 <div className="flex items-center gap-2 group">
                     <Volume2 className="w-5 h-5 text-text-muted" />
                     <input

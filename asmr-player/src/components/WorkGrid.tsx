@@ -3,6 +3,7 @@ import { useLibrary, Work } from '../hooks/useLibrary';
 import { usePlayerStore } from '../hooks/usePlayerStore';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { MetadataEditor } from './MetadataEditor';
+import { WorkDetailModal } from './WorkDetailModal';
 import { useState, useMemo, useEffect } from 'react';
 
 interface WorkGridProps {
@@ -31,6 +32,7 @@ export function WorkGrid({
     const { works, loading, refetch } = useLibrary();
     const { setTrack, setQueue } = usePlayerStore();
     const [editingWork, setEditingWork] = useState<Work | null>(null);
+    const [selectedWork, setSelectedWork] = useState<Work | null>(null);
     const [favorites, setFavorites] = useState<Set<number>>(new Set());
     const [sortMode, setSortMode] = useState<SortMode>('newest');
 
@@ -208,7 +210,7 @@ export function WorkGrid({
                         key={work.id}
                         work={work}
                         isFavorite={favorites.has(work.id)}
-                        onPlay={() => handlePlay(work)}
+                        onPlay={() => setSelectedWork(work)}
                         onEdit={() => setEditingWork(work)}
                         onDelete={() => handleDelete(work)}
                         onToggleFavorite={() => toggleFavorite(work.id)}
@@ -218,6 +220,15 @@ export function WorkGrid({
                     />
                 ))}
             </div>
+
+            {/* Work Detail Modal */}
+            {selectedWork && (
+                <WorkDetailModal
+                    work={selectedWork}
+                    isOpen={!!selectedWork}
+                    onClose={() => setSelectedWork(null)}
+                />
+            )}
 
             {editingWork && (
                 <MetadataEditor
