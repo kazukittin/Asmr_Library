@@ -416,6 +416,47 @@ async fn get_works_by_tag(pool: tauri::State<'_, sqlx::SqlitePool>, tag_id: i64)
     Ok(works)
 }
 
+#[tauri::command]
+async fn get_works_by_tags(pool: tauri::State<'_, sqlx::SqlitePool>, tag_ids: Vec<i64>) -> Result<Vec<Work>, String> {
+    if tag_ids.is_empty() {
+        return Ok(vec![]);
+    }
+
+    // Build placeholders for IN clause
+    let placeholders: Vec<String> = tag_ids.iter().map(|_| "?".to_string()).collect();
+    let in_clause = placeholders.join(", ");
+    let tag_count = tag_ids.len() as i64;
+
+    // SQL: Find works that have ALL the specified tags (AND condition)
+    let sql = format!(r#"
+        SELECT 
+            w.id, w.rj_code, w.title, w.dir_path, w.cover_path,
+            (SELECT GROUP_CONCAT(name, ', ') FROM tags t JOIN work_tags wt ON t.id = wt.tag_id WHERE wt.work_id = w.id) as tags,
+            (SELECT GROUP_CONCAT(name, ', ') FROM voice_actors v JOIN work_voice_actors wv ON v.id = wv.voice_actor_id WHERE wv.work_id = w.id) as voice_actors,
+            (SELECT GROUP_CONCAT(name, ', ') FROM circles c JOIN work_circles wc ON c.id = wc.circle_id WHERE wc.work_id = w.id) as circles
+        FROM works w
+        WHERE w.id IN (
+            SELECT work_id FROM work_tags 
+            WHERE tag_id IN ({})
+            GROUP BY work_id
+            HAVING COUNT(DISTINCT tag_id) = ?
+        )
+        ORDER BY w.created_at DESC
+    "#, in_clause);
+
+    let mut query = sqlx::query_as::<_, Work>(&sql);
+    for tag_id in &tag_ids {
+        query = query.bind(tag_id);
+    }
+    query = query.bind(tag_count);
+
+    let works = query
+        .fetch_all(pool.inner())
+        .await
+        .map_err(|e| e.to_string())?;
+    Ok(works)
+}
+
 #[derive(serde::Serialize, sqlx::FromRow)]
 pub struct VoiceActorWithCount {
     id: i64,
@@ -981,6 +1022,7 @@ pub fn run() {
             get_all_tags,
             get_works_by_voice_actor,
             get_works_by_tag,
+            get_works_by_tags,
             get_voice_actors_with_count,
             get_tags_with_count,
             get_all_playlists,

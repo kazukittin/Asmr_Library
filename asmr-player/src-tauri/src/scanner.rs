@@ -255,7 +255,6 @@ fn extract_embedded_cover(dir_path: &Path) -> Option<String> {
 
 async fn scan_tracks(work_id: i64, path: &Path, pool: &SqlitePool) -> Result<(), sqlx::Error> {
     for entry in WalkDir::new(path)
-        .max_depth(1)
         .into_iter()
         .filter_map(|e| e.ok())
     {

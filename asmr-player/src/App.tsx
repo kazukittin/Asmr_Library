@@ -99,7 +99,27 @@ function App() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-screen bg-bg-main text-gray-300 overflow-hidden font-sans selection:bg-accent selection:text-white">
+    <div className="flex flex-col h-screen w-screen bg-bg-main text-text-primary overflow-hidden font-sans selection:bg-accent selection:text-white">
+      {/* Blue Header Bar */}
+      <header className="h-14 bg-accent text-white flex items-center px-4 shrink-0 z-30 shadow-md">
+        <div className="flex items-center gap-3">
+          <span className="font-bold text-lg tracking-wide">ASMR Player</span>
+        </div>
+        <div className="flex-1 flex justify-center px-8">
+          <div className="w-full max-w-xl relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-white/70" />
+            <input
+              type="text"
+              placeholder="検索 (タイトル, CV, RJ番号)..."
+              className="w-full bg-white/20 border border-white/30 rounded-full py-2 pl-10 pr-4 text-sm text-white placeholder-white/70 focus:outline-none focus:bg-white/30 focus:border-white/50 transition-colors"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </div>
+        </div>
+        <div className="w-32"></div>
+      </header>
+
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
           currentPage={currentPage}
@@ -108,28 +128,12 @@ function App() {
           selectedPlaylistId={selectedPlaylist?.id}
         />
 
-        <main className="flex-1 flex flex-col relative overflow-hidden bg-gradient-to-b from-bg-sidebar to-bg-main">
-          <header className="h-16 glass z-10 flex items-center justify-between px-8 sticky top-0 border-b border-white/5 shrink-0">
-            {currentPage === 'library' ? (
-              <div className="w-96 relative">
-                <Search className="w-4 h-4 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-500" />
-                <input
-                  type="text"
-                  placeholder="検索 (タイトル, CV, RJ番号)..."
-                  className="w-full bg-white/5 border border-white/10 rounded-full py-1.5 pl-10 pr-4 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-accent focus:bg-white/10 transition-colors"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-            ) : (
-              <h1 className="text-lg font-bold text-white">{getPageTitle()}</h1>
-            )}
-
-            <div className="flex items-center space-x-4">
-              {/* Extra header items if needed */}
+        <main className="flex-1 flex flex-col relative overflow-hidden bg-bg-main">
+          {currentPage !== 'library' && (
+            <div className="h-12 flex items-center px-6 border-b border-card-border bg-bg-panel shrink-0">
+              <h1 className="text-lg font-bold text-text-primary">{getPageTitle()}</h1>
             </div>
-          </header>
-
+          )}
           {renderMainContent()}
         </main>
 

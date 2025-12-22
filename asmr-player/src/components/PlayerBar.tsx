@@ -332,20 +332,20 @@ export function PlayerBar() {
     const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
     return (
-        <footer className="h-24 bg-[#0f0f12] border-t border-white/5 flex items-center justify-between px-6 z-50 relative shadow-[0_-10px_40px_rgba(0,0,0,0.5)] shrink-0">
-            <canvas ref={canvasRef} className="absolute bottom-0 left-0 w-full h-full pointer-events-none opacity-20 mix-blend-screen"></canvas>
+        <footer className="h-20 bg-white border-t border-card-border flex items-center justify-between px-6 z-50 relative shadow-[0_-4px_20px_rgba(0,0,0,0.08)] shrink-0">
+            <canvas ref={canvasRef} className="absolute bottom-0 left-0 w-full h-full pointer-events-none opacity-10"></canvas>
 
             <div className="flex items-center w-1/4 min-w-[240px] z-10">
                 {currentTrack && (
                     <>
-                        <div className="relative w-14 h-14 rounded-md overflow-hidden mr-4 group cursor-pointer shadow-lg">
-                            <img src={currentTrack.cover_path ? convertFileSrc(currentTrack.cover_path) : "https://placehold.co/100x100/2a2a35/FFF"} className="w-full h-full object-cover group-hover:opacity-50 transition" />
+                        <div className="relative w-12 h-12 rounded-lg overflow-hidden mr-3 group cursor-pointer shadow-md">
+                            <img src={currentTrack.cover_path ? convertFileSrc(currentTrack.cover_path) : "https://placehold.co/100x100/e0e0e0/999"} className="w-full h-full object-cover group-hover:opacity-50 transition" />
                         </div>
                         <div className="flex flex-col overflow-hidden">
-                            <span className="text-sm font-bold text-white truncate cursor-pointer hover:underline decoration-accent">{currentTrack.title}</span>
-                            <span className="text-xs text-gray-400 truncate mt-0.5">{currentTrack.work_title || "作品名未設定"}</span>
+                            <span className="text-sm font-bold text-text-primary truncate cursor-pointer hover:underline decoration-accent">{currentTrack.title}</span>
+                            <span className="text-xs text-text-muted truncate mt-0.5">{currentTrack.work_title || "作品名未設定"}</span>
                             {playbackMode === 'web' && (
-                                <span className="text-[10px] text-purple-400">🌐 Web Audio</span>
+                                <span className="text-[10px] text-accent">🌐 Web Audio</span>
                             )}
                         </div>
                     </>
@@ -355,31 +355,31 @@ export function PlayerBar() {
             <div className="flex flex-col items-center flex-1 min-w-0 px-4 max-w-3xl w-full z-10">
                 <div className="flex items-center gap-6 mb-2">
                     <button
-                        className={`hover: text - white transition ${shuffle ? 'text-accent' : 'text-gray-400'} `}
+                        className={`transition ${shuffle ? 'text-accent' : 'text-text-muted hover:text-text-primary'}`}
                         onClick={toggleShuffle}
                         title={shuffle ? 'シャッフル: ON' : 'シャッフル: OFF'}
                     >
                         <Shuffle className="w-4 h-4" />
                     </button>
-                    <button className="text-gray-300 hover:text-white hover:scale-110 transition" onClick={playPrev}><SkipBack className="w-6 h-6" /></button>
+                    <button className="text-text-secondary hover:text-text-primary hover:scale-110 transition" onClick={playPrev}><SkipBack className="w-5 h-5" /></button>
                     <button
-                        className="w-10 h-10 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition shadow-[0_0_15px_rgba(255,255,255,0.3)]"
+                        className="w-10 h-10 rounded-full bg-accent text-white flex items-center justify-center hover:scale-105 transition shadow-lg"
                         onClick={togglePlay}
                     >
-                        {isPlaying ? <Pause className="w-5 h-5 ml-0.5" /> : <Play className="w-5 h-5 ml-1" />}
+                        {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-0.5" />}
                     </button>
-                    <button className="text-gray-300 hover:text-white hover:scale-110 transition" onClick={playNext}><SkipForward className="w-6 h-6" /></button>
+                    <button className="text-text-secondary hover:text-text-primary hover:scale-110 transition" onClick={playNext}><SkipForward className="w-5 h-5" /></button>
                     <button
-                        className={`hover: text - accent - glow transition ${repeatMode !== 'off' ? 'text-accent' : 'text-gray-400'} `}
+                        className={`transition ${repeatMode !== 'off' ? 'text-accent' : 'text-text-muted hover:text-text-primary'}`}
                         onClick={cycleRepeatMode}
-                        title={`リピート: ${repeatMode === 'off' ? 'OFF' : repeatMode === 'all' ? '全曲' : '1曲'} `}
+                        title={`リピート: ${repeatMode === 'off' ? 'OFF' : repeatMode === 'all' ? '全曲' : '1曲'}`}
                     >
                         {repeatMode === 'one' ? <Repeat1 className="w-4 h-4" /> : <Repeat className="w-4 h-4" />}
                     </button>
                 </div>
 
-                <div className="w-full flex items-center gap-3 text-xs font-mono text-gray-400">
-                    <span className="min-w-[40px] text-right text-white">{formatTime(currentTime)}</span>
+                <div className="w-full flex items-center gap-3 text-xs font-mono text-text-muted">
+                    <span className="min-w-[40px] text-right text-text-primary">{formatTime(currentTime)}</span>
 
                     <div className="relative flex-1 h-4 flex items-center group">
                         <input
@@ -393,13 +393,13 @@ export function PlayerBar() {
                             className="absolute w-full h-1 bg-transparent opacity-0 cursor-pointer z-20"
                         />
 
-                        <div className="w-full h-1 bg-gray-700 rounded-lg overflow-hidden relative">
-                            <div className="absolute top-0 left-0 h-full bg-accent" style={{ width: `${progressPercent}% ` }}></div>
+                        <div className="w-full h-1 bg-gray-200 rounded-lg overflow-hidden relative">
+                            <div className="absolute top-0 left-0 h-full bg-accent" style={{ width: `${progressPercent}%` }}></div>
                         </div>
 
                         <div
-                            className="absolute h-3 w-3 bg-white rounded-full shadow pointer-events-none z-10 transition-transform group-hover:scale-125"
-                            style={{ left: `${progressPercent}% `, transform: 'translateX(-50%)' }}
+                            className="absolute h-3 w-3 bg-accent rounded-full shadow pointer-events-none z-10 transition-transform group-hover:scale-125"
+                            style={{ left: `${progressPercent}%`, transform: 'translateX(-50%)' }}
                         ></div>
                     </div>
 
@@ -407,9 +407,9 @@ export function PlayerBar() {
                 </div>
             </div>
 
-            <div className="flex items-center justify-end w-1/4 min-w-[240px] gap-4 z-10">
+            <div className="flex items-center justify-end w-1/4 min-w-[200px] gap-4 z-10">
                 <div className="flex items-center gap-2 group">
-                    <Volume2 className="w-5 h-5 text-gray-400" />
+                    <Volume2 className="w-5 h-5 text-text-muted" />
                     <input
                         type="range"
                         min="0"
@@ -417,7 +417,7 @@ export function PlayerBar() {
                         step="0.01"
                         value={volume}
                         onChange={handleVolumeChange}
-                        className="w-20 cursor-pointer accent-accent h-1 bg-gray-700 rounded-lg appearance-none"
+                        className="w-20 cursor-pointer accent-accent h-1 bg-gray-200 rounded-lg appearance-none"
                     />
                 </div>
             </div>

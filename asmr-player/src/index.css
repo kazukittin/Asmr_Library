@@ -1,13 +1,33 @@
 @import "tailwindcss";
 
 @theme {
-    --color-bg-main: #0a0a0c;
-    --color-bg-sidebar: #121216;
-    --color-bg-panel: #18181f;
-    --color-bg-hover: #22222c;
+    /* Light Theme - ASMR.one Style */
+    --color-bg-main: #f0f0f0;
+    --color-bg-sidebar: #1a1a2e;
+    --color-bg-panel: #ffffff;
+    --color-bg-hover: #e5e5e5;
 
-    --color-accent: #a855f7;
-    --color-accent-glow: #d8b4fe;
+    /* Blue accent like ASMR.one */
+    --color-accent: #1976d2;
+    --color-accent-light: #42a5f5;
+    --color-accent-glow: #90caf9;
+
+    /* Text colors for light theme */
+    --color-text-primary: #1a1a1a;
+    --color-text-secondary: #666666;
+    --color-text-muted: #999999;
+
+    /* Card styling */
+    --color-card-bg: #ffffff;
+    --color-card-border: #e0e0e0;
+
+    /* Tag colors */
+    --color-tag-bg: #e8e8e8;
+    --color-tag-text: #555555;
+
+    /* Circle/VA badges */
+    --color-circle-badge: #ff9800;
+    --color-va-badge: #4caf50;
 
     --font-sans: 'Inter', 'YuGothic', sans-serif;
 
@@ -15,24 +35,54 @@
 }
 
 @utility glass {
-    @apply bg-[#121216]/70 backdrop-blur-md;
+    @apply bg-white/80 backdrop-blur-md;
 }
 
-/* Custom scrollbar */
+@utility card-shadow {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+@utility card-shadow-hover {
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+}
+
+/* Badge styles */
+@utility badge {
+    @apply px-2 py-0.5 text-xs font-medium rounded;
+}
+
+@utility badge-rj {
+    @apply bg-black/70 text-white backdrop-blur-sm;
+}
+
+@utility badge-date {
+    @apply bg-black/50 text-white text-[10px] backdrop-blur-sm;
+}
+
+/* Custom scrollbar - Light theme */
 ::-webkit-scrollbar {
     width: 8px;
 }
 
 ::-webkit-scrollbar-track {
-    background: #0a0a0c;
+    background: #f0f0f0;
 }
 
 ::-webkit-scrollbar-thumb {
-    background: #333;
+    background: #ccc;
     border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-    background: #4b5563;
+    background: #aaa;
     border-radius: 4px;
+}
+
+/* Sidebar scrollbar - Dark */
+.sidebar-scroll::-webkit-scrollbar-track {
+    background: #1a1a2e;
+}
+
+.sidebar-scroll::-webkit-scrollbar-thumb {
+    background: #333;
 }

@@ -56,22 +56,22 @@ export function VoiceActorsPage({ onSelectWork }: VoiceActorsPageProps) {
 
     if (loading) {
         return (
-            <div className="flex-1 flex items-center justify-center">
+            <div className="flex-1 flex items-center justify-center bg-bg-main">
                 <Disc3 className="w-8 h-8 text-accent animate-spin" />
             </div>
         );
     }
 
     return (
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden bg-bg-main">
             {/* Voice Actor List */}
-            <div className="w-64 border-r border-white/5 overflow-y-auto custom-scrollbar bg-black/20">
-                <div className="p-4 border-b border-white/5 sticky top-0 bg-bg-sidebar z-10">
-                    <h2 className="text-lg font-bold text-white flex items-center gap-2">
+            <div className="w-64 border-r border-card-border overflow-y-auto bg-bg-panel">
+                <div className="p-4 border-b border-card-border sticky top-0 bg-bg-panel z-10">
+                    <h2 className="text-lg font-bold text-text-primary flex items-center gap-2">
                         <Mic className="w-5 h-5 text-accent" />
                         声優一覧
                     </h2>
-                    <p className="text-xs text-gray-500 mt-1">{voiceActors.length}名</p>
+                    <p className="text-xs text-text-muted mt-1">{voiceActors.length}名</p>
                 </div>
 
                 <div className="p-2">
@@ -80,12 +80,12 @@ export function VoiceActorsPage({ onSelectWork }: VoiceActorsPageProps) {
                             key={va.id}
                             onClick={() => selectVoiceActor(va)}
                             className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between ${selectedVA?.id === va.id
-                                    ? 'bg-accent text-white'
-                                    : 'text-gray-300 hover:bg-white/5'
+                                ? 'bg-accent text-white'
+                                : 'text-text-secondary hover:bg-bg-hover'
                                 }`}
                         >
                             <span className="truncate">{va.name}</span>
-                            <span className={`text-xs shrink-0 ml-2 ${selectedVA?.id === va.id ? 'text-white/70' : 'text-gray-500'
+                            <span className={`text-xs shrink-0 ml-2 ${selectedVA?.id === va.id ? 'text-white/70' : 'text-text-muted'
                                 }`}>
                                 {va.count}作品
                             </span>
@@ -93,7 +93,7 @@ export function VoiceActorsPage({ onSelectWork }: VoiceActorsPageProps) {
                     ))}
 
                     {voiceActors.length === 0 && (
-                        <p className="text-gray-500 text-sm text-center py-8">
+                        <p className="text-text-muted text-sm text-center py-8">
                             まだ声優が登録されていません
                         </p>
                     )}
@@ -101,10 +101,10 @@ export function VoiceActorsPage({ onSelectWork }: VoiceActorsPageProps) {
             </div>
 
             {/* Works Grid */}
-            <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+            <div className="flex-1 overflow-y-auto p-6">
                 {selectedVA ? (
                     <>
-                        <h2 className="text-xl font-bold text-white mb-4">
+                        <h2 className="text-xl font-bold text-text-primary mb-4">
                             {selectedVA.name} の作品
                         </h2>
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
@@ -119,7 +119,7 @@ export function VoiceActorsPage({ onSelectWork }: VoiceActorsPageProps) {
                         </div>
                     </>
                 ) : (
-                    <div className="flex flex-col items-center justify-center h-full text-gray-500">
+                    <div className="flex flex-col items-center justify-center h-full text-text-muted">
                         <Mic className="w-16 h-16 mb-4 opacity-20" />
                         <p>左側のリストから声優を選択してください</p>
                     </div>
@@ -142,15 +142,15 @@ function WorkCard({ work, onSelect, onEdit }: { work: Work; onSelect: (work: Wor
     const coverUrl = work.cover_path ? convertFileSrc(work.cover_path) : null;
 
     return (
-        <div className="group relative bg-bg-panel rounded-lg overflow-hidden border border-white/5 hover:border-accent/50 transition-all">
+        <div className="group relative bg-bg-panel rounded-lg overflow-hidden card-shadow hover:card-shadow-hover transition-all">
             <div
-                className="aspect-square bg-gray-800 cursor-pointer relative"
+                className="aspect-square bg-gray-100 cursor-pointer relative"
                 onClick={() => onSelect(work)}
             >
                 {coverUrl ? (
                     <img src={coverUrl} alt={work.title} className="w-full h-full object-cover" />
                 ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-600">
+                    <div className="w-full h-full flex items-center justify-center text-text-muted">
                         <Disc3 className="w-12 h-12" />
                     </div>
                 )}
@@ -163,11 +163,11 @@ function WorkCard({ work, onSelect, onEdit }: { work: Work; onSelect: (work: Wor
                 </div>
             </div>
             <div className="p-3">
-                <p className="text-sm text-white font-medium truncate" title={work.title}>
+                <p className="text-sm text-text-primary font-medium truncate" title={work.title}>
                     {work.title}
                 </p>
                 {work.circles && (
-                    <p className="text-xs text-gray-500 truncate mt-1">{work.circles}</p>
+                    <p className="text-xs text-text-muted truncate mt-1">{work.circles}</p>
                 )}
             </div>
             <button
